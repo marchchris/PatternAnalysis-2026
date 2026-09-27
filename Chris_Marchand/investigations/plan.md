@@ -65,16 +65,8 @@ Future Note: Will need to see if data augmentation is needed to prevent overfitt
 
 ### Model Training
 
-1. As a baseline, a small CNN classifier will be trained on the preprocessed dataset. This will be a 3-convolution-layer CNN:
-    - Input: `1 × 256 × 256`
-    - 3×3 convolution (16 filters) → ReLU → 2×2 max pooling: `16 × 128 × 128`
-    - 3×3 convolution (32 filters) → ReLU → 2×2 max pooling: `32 × 64 × 64`
-    - 3×3 convolution (64 filters) → ReLU → 2×2 max pooling: `64 × 32 × 32`
-    - Adaptive Average Pooling: `64 × 4 × 4`
-    - Flatten → 128 neurons → ReLU → 2 outputs: `2`
-
-The 2 outputs are for the classes `CN` and `AC`.
-
+1. As a baseline, a small Resnet18 model will be used.
+    - https://docs.pytorch.org/vision/main/models/resnet.html
 2. After this baseline model has been trained and optimised. The tiny ConvNeXt model will be trained.
 3. The ConvNeXt model will be fine tuned to achieve maximum performance, potentially using a larger variation if computation capabilities will allow it.
 4. Potentially experiment with data augmentation if overfitting to the train set occurs.
