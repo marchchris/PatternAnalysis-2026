@@ -14,7 +14,7 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
 
 # import constants from config file
-from config import CLASS_NAMES, DATASET_SPLIT_NAMES
+from config import CLASS_NAMES, DATASET_SPLIT_NAMES, DATASET_ROOT, METADATA_PATH, SEED
 
 PATIENT_PATTERN = re.compile(r"ADNI_(\d{3}_S_\d{4})", re.IGNORECASE)
 
@@ -47,3 +47,50 @@ def build_image_table(dataset_root, scan_to_patient):
     # convert table to pandas dataframe and return
     table = pd.DataFrame(rows)
     return table
+
+def create_splits(dataset_root=DATASET_ROOT, metadata_path=METADATA_PATH, seed=SEED):
+    """Create patient splits and print dataset summaries"""
+
+    with Path(metadata_path).expanduser().open("r", encoding="utf-8") as file:
+        metadata = json.load(file)
+
+    # create mapping of scan_id -> patient_id
+    scan_to_patient = {
+        str(scan_id): patient_id_from_record(record)
+        for scan_id, record in metadata.items()
+    }
+
+    # create table where each row is exactly one unique patient
+    dataset_df = build_image_table(dataset_root, scan_to_patient)
+    patients = dataset_df[["patient_id", "class_name"]].drop_duplicates("patient_id")
+
+    # split patients into 70% training and 30% for validation/testing
+    train, remaining = train_test_split(
+        patients,
+        test_size=0.3,
+        stratify=patients["class_name"],
+        random_state=seed,
+    )
+
+    # split the remaining 30% into 20% validation and 10% testing
+    val, test = train_test_split(
+        remaining,
+        test_size=1 / 3, # 10% of 30%
+        stratify=remaining["class_name"],
+        random_state=seed,
+    )
+
+    print(f"Total: {len(dataset_df)} images from {len(patients)} patients")
+    splits = []
+
+    # place images into their splits with their associated patient
+    for name, group in [("Train", train), ("Validation", val), ("Test", test)]:
+        frame = dataset_df[dataset_df["patient_id"].isin(group["patient_id"])].reset_index(drop=True)
+        splits.append(frame)
+        print(
+            f"\n{name}: {len(frame)} images ({len(frame) / len(dataset_df):.2%}), "
+            f"{len(group)} patients"
+        )
+        print(frame["class_name"].value_counts().to_string())
+
+    return tuple(splits)
