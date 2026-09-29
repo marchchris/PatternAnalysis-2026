@@ -1,10 +1,8 @@
 """Config file for storing paths, defining constants and hyperparameters."""
 
-from pathlib import Path
-
 # paths for ADNI dataset
-DATASET_ROOT = Path("~/Documents/Datasets/ADNI/AD_NC").expanduser()
-METADATA_PATH = Path("~/Documents/Datasets/ADNI/meta_data_with_label.json").expanduser()
+DATASET_ROOT = "~/Documents/Datasets/ADNI/AD_NC"
+METADATA_PATH = "~/Documents/Datasets/ADNI/meta_data_with_label.json"
 
 # constants for files
 SEED = 42

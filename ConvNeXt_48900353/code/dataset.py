@@ -48,7 +48,7 @@ def build_image_table(dataset_root, scan_to_patient):
     table = pd.DataFrame(rows)
     return table
 
-def create_splits(dataset_root=DATASET_ROOT, metadata_path=METADATA_PATH, seed=SEED):
+def create_splits(dataset_root, metadata_path, seed=SEED):
     """Create patient splits and print dataset summaries"""
 
     with Path(metadata_path).expanduser().open("r", encoding="utf-8") as file:
@@ -128,8 +128,12 @@ def load_batch(batch):
 
     return torch.stack(images), torch.tensor(labels, dtype=torch.long)
 
-def create_dataloaders(batch_size=32, num_workers=0, dataset_root=DATASET_ROOT, metadata_path=METADATA_PATH, seed=SEED):
+def create_dataloaders(dataset_root, metadata_path, batch_size=32, num_workers=0, seed=SEED):
     """Returns train, validation and test loaders that load images per batch"""
+
+    # convert path strings to actual paths
+    dataset_root = Path(dataset_root).expanduser()
+    metadata_path = Path(metadata_path).expanduser()
 
     splits = create_splits(dataset_root, metadata_path, seed)
     loaders = []
@@ -151,7 +155,7 @@ def create_dataloaders(batch_size=32, num_workers=0, dataset_root=DATASET_ROOT, 
     return tuple(loaders)
 
 if __name__ == "__main__":
-    train_loader, val_loader, test_loader = create_dataloaders()
+    train_loader, val_loader, test_loader = create_dataloaders(DATASET_ROOT, METADATA_PATH)
     images, labels = next(iter(train_loader))
     print(f"\nImage batch shape: {images.shape}")
     print(f"Label batch shape: {labels.shape}")
