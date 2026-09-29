@@ -6,7 +6,6 @@ import json
 import re
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import torch
 from PIL import Image, ImageOps
@@ -111,8 +110,9 @@ def preprocess_image(image):
     # copy grayscale values into each of the three RGB channels
     image = image.convert("RGB")
 
-    image_array = np.asarray(image, dtype=np.float32) / 255.0 # convert to numpy array and normalise pixels value to 0 - 1
-    image_tensor = torch.from_numpy(image_array).permute(2, 0, 1) # convert numpy array to tensor
+    # convert PIL RGB pixels directly to a float tensor in [0, 1]
+    pixels = torch.tensor(list(image.getdata()), dtype=torch.float32)
+    image_tensor = pixels.view(256, 256, 3).permute(2, 0, 1) / 255.0
     return image_tensor
 
 def load_batch(batch):
