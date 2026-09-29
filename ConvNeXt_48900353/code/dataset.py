@@ -94,3 +94,23 @@ def create_splits(dataset_root=DATASET_ROOT, metadata_path=METADATA_PATH, seed=S
         print(frame["class_name"].value_counts().to_string())
 
     return tuple(splits)
+
+def preprocess_image(image):
+    """Returns a preprocessed image as a (3, 256, 256) tensor"""
+
+    image = image.convert("L")
+    width, height = image.size
+
+    # pad image with black pixels to upscale it to 256 x 256
+    left = (256 - width) // 2
+    top = (256 - height) // 2
+    right = 256 - width - left
+    bottom = 256 - height - top
+    image = ImageOps.expand(image, border=(left, top, right, bottom), fill=0)
+
+    # copy grayscale values into each of the three RGB channels
+    image = image.convert("RGB")
+
+    image_array = np.asarray(image, dtype=np.float32) / 255.0 # convert to numpy array and normalise pixels value to 0 - 1
+    image_tensor = torch.from_numpy(image_array).permute(2, 0, 1) # convert numpy array to tensor
+    return image_tensor
