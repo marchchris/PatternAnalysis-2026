@@ -10,4 +10,6 @@ METADATA_PATH = Path("~/Datasets/ADNI/meta_data_with_label.json").expanduser()
 SEED = 42
 CLASS_NAMES = ["AD", "NC"]
 LABEL_MAP = {"NC:" : 0, "AD" : 1} # label 0 = Normal Congnitive Ability, label 1 = Alzheimer's Disease
+DATASET_SPLIT_NAMES = ["train", "test"]
+
 
