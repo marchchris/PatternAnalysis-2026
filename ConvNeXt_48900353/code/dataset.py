@@ -14,7 +14,7 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
 
 # import constants from config file
-from config import CLASS_NAMES, DATASET_SPLIT_NAMES, DATASET_ROOT, METADATA_PATH, SEED
+from config import CLASS_NAMES, DATASET_SPLIT_NAMES, DATASET_ROOT, METADATA_PATH, SEED, LABEL_MAP
 
 PATIENT_PATTERN = re.compile(r"ADNI_(\d{3}_S_\d{4})", re.IGNORECASE)
 
@@ -35,7 +35,7 @@ def build_image_table(dataset_root, scan_to_patient):
             folder = dataset_root / split / class_name # get path to specific split folder
 
             for path in sorted(folder.rglob("*")): # get path to all images in folder
-                scan_id = str(path).split("/")[-1].split("_")[0] # get scan id from image file name
+                scan_id = path.name.split("_", 1)[0] # get scan id from image file name
 
                 # append image_path, class_name, and patient_id as row to table
                 rows.append({
@@ -114,3 +114,45 @@ def preprocess_image(image):
     image_array = np.asarray(image, dtype=np.float32) / 255.0 # convert to numpy array and normalise pixels value to 0 - 1
     image_tensor = torch.from_numpy(image_array).permute(2, 0, 1) # convert numpy array to tensor
     return image_tensor
+
+def load_batch(batch):
+    """Load and preprocess a batch of (image_path, class_name) pairs"""
+
+    images = []
+    labels = []
+
+    for image_path, class_name in batch:
+        with Image.open(image_path) as image:
+            images.append(preprocess_image(image))
+        labels.append(LABEL_MAP[class_name])
+
+    return torch.stack(images), torch.tensor(labels, dtype=torch.long)
+
+def create_dataloaders(batch_size=32, num_workers=0, dataset_root=DATASET_ROOT, metadata_path=METADATA_PATH, seed=SEED):
+    """Returns train, validation and test loaders that load images per batch"""
+
+    splits = create_splits(dataset_root, metadata_path, seed)
+    loaders = []
+
+    for split_index, frame in enumerate(splits):
+            # store only image path and classes, load pixels when a batch is requested
+            samples = list(zip(frame["image_path"], frame["class_name"]))
+            loader = DataLoader(
+                samples,
+                batch_size=batch_size,
+                shuffle=(split_index == 0),  # shuffle only the training split
+                num_workers=num_workers,
+                collate_fn=load_batch,
+                generator=torch.Generator().manual_seed(seed), # allow reproducibility
+            )
+
+            loaders.append(loader)
+
+    return tuple(loaders)
+
+if __name__ == "__main__":
+    train_loader, val_loader, test_loader = create_dataloaders()
+    images, labels = next(iter(train_loader))
+    print(f"\nImage batch shape: {images.shape}")
+    print(f"Label batch shape: {labels.shape}")
+    print(f"Pixel range: {images.min().item():.3f} to {images.max().item():.3f}")
