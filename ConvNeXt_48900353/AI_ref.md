@@ -15,9 +15,9 @@ print(subdirectories)
 ```
 
 
-### ChatGPT 5.6 (Sep 26 10:51pm)
+### ChatGPT 5.6 Sol (Sep 26 10:51pm)
 
-Prompt: "Give python regex for matching the patient id from this string.
+Prompt: "Give python regex for matching the patient id from this string."
 
 "ADNI_T1_3T/ADNI_016_S_6381_MR_Accelerated_Sagittal_MPRAGE__br_raw_20180522132015417_85_S688087_I1000691.nii"
 
@@ -27,4 +27,24 @@ The patient id is 016_S_6381"
 You can use this regex:
 
 r"ADNI_(\d{3}_S_\d{4})"
+```
+
+### ChatGPT 5.6 Sol (Sep 29 3:00pm)
+
+Prompt: "write function documentation for this function"
+
+```
+"""Build a classification model with a custom output layer.
+
+Args:
+    model_name: Model architecture to create: ``"resnet18"`` or
+        ``"convnext"``.
+    num_classes: Number of output classes.
+
+Returns:
+    A randomly initialized model configured for ``num_classes`` outputs.
+
+Raises:
+    ValueError: If ``model_name`` is not supported.
+    """
 ```
