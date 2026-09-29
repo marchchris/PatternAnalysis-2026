@@ -1,3 +1,8 @@
+"""
+This file provides a single function for creating randomly initialized ResNet-18 or ConvNeXt-Tiny models and 
+replacing their final classification layers with the specified number of output classes.
+"""
+
 import torch.nn as nn
 from torchvision.models import convnext_tiny, resnet18
 
