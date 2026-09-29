@@ -2,14 +2,15 @@ from datetime import datetime
 from pathlib import Path
 import torch
 from torch import nn
+import matplotlib.pyplot as plt
 
 from config import LABEL_MAP, SEED, DATASET_ROOT, METADATA_PATH
 from dataset import create_dataloaders
 from modules import build_model
 
-MODEL_NAME = "convnext"
-BATCH_SIZE = 128
-EPOCHS = 30
+MODEL_NAME = "resnet18"
+BATCH_SIZE = 512
+EPOCHS = 10
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 1e-4
 NUM_WORKERS = 4
@@ -60,6 +61,41 @@ def run_epoch(model, loader, criterion, device, optimizer=None, epoch=None):
 
     return total_loss / total_images, total_correct / total_images
 
+def save_training_plot(history, run_dir):
+    """Creates and saves loss and accuracy plots of model"""
+    epochs = [entry["epoch"] for entry in history]
+    train_losses = [entry["train_loss"] for entry in history]
+    val_losses = [entry["val_loss"] for entry in history]
+    train_accuracies = [entry["train_accuracy"] for entry in history]
+    val_accuracies = [entry["val_accuracy"] for entry in history]
+
+    figure, (loss_axis, accuracy_axis) = plt.subplots(1, 2, figsize=(12, 5))
+
+    # create loss plot
+    loss_axis.plot(epochs, train_losses, label="Training")
+    loss_axis.plot(epochs, val_losses, label="Validation")
+    loss_axis.set_title("Loss")
+    loss_axis.set_xlabel("Epoch")
+    loss_axis.set_ylabel("Loss")
+    loss_axis.legend()
+    loss_axis.grid(True, alpha=0.3)
+
+    # create accuracy plot
+    accuracy_axis.plot(epochs, train_accuracies, label="Training")
+    accuracy_axis.plot(epochs, val_accuracies, label="Validation")
+    accuracy_axis.set_title("Accuracy")
+    accuracy_axis.set_xlabel("Epoch")
+    accuracy_axis.set_ylabel("Accuracy")
+    accuracy_axis.legend()
+    accuracy_axis.grid(True, alpha=0.3)
+
+    # save plot under run directory
+    figure.tight_layout()
+    plot_path = run_dir / "training_history.png"
+    figure.savefig(plot_path, dpi=150)
+    plt.close(figure)
+    print(f"Saved training plot to: {plot_path}")
+
 def main():
     # allow reproducibility
     torch.manual_seed(SEED)
@@ -87,6 +123,8 @@ def main():
         model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
     )
 
+    history = []
+
     # main training loop
     print("\n--- Beginning Training ---")
     for epoch in range(1, EPOCHS + 1):
@@ -100,6 +138,15 @@ def main():
             model, val_loader, criterion, device
         )
 
+        # add current epoch results to history
+        history.append({
+            "epoch": epoch,
+            "train_loss": train_loss,
+            "val_loss": val_loss,
+            "train_accuracy": train_accuracy,
+            "val_accuracy": val_accuracy,
+        })
+
         print(
             f"Epoch {epoch:02d}/{EPOCHS} | "
             f"Train loss: {train_loss:.4f}, accuracy: {train_accuracy:.2%} | "
@@ -108,15 +155,18 @@ def main():
 
     print("\n--- Finished Training ---")
 
-    # create directory for model to be saved to
-    results_dir = Path("Results") / MODEL_NAME
-    results_dir.mkdir(parents=True, exist_ok=True)
+    # create a directory for this runs model and plot
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    run_dir = Path("Results") / MODEL_NAME / f"{MODEL_NAME}_{timestamp}"
+    run_dir.mkdir(parents=True, exist_ok=True)
 
-    # save model under its directory
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    model_path = results_dir / f"{MODEL_NAME}_{timestamp}.pth"
+    # save model under the run directory
+    model_path = run_dir / f"{MODEL_NAME}.pth"
     torch.save(model.state_dict(), model_path)
     print(f"Saved model to: {model_path}")
+
+    # save training plot under the run directory
+    save_training_plot(history, run_dir)
 
 
 if __name__ == "__main__":
