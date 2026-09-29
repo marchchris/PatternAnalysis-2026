@@ -1,1 +1,13 @@
 """Config file for storing paths, defining constants and hyperparameters."""
+
+from pathlib import Path
+
+# paths for ADNI dataset
+DATASET_ROOT = Path("~/Datasets/ADNI/AD_NC").expanduser()
+METADATA_PATH = Path("~/Datasets/ADNI/meta_data_with_label.json").expanduser()
+
+# constants for files
+SEED = 42
+CLASS_NAMES = ["AD", "NC"]
+LABEL_MAP = {"NC:" : 0, "AD" : 1} # label 0 = Normal Congnitive Ability, label 1 = Alzheimer's Disease
+
