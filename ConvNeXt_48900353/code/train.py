@@ -96,6 +96,32 @@ def save_training_plot(history, run_dir):
     plt.close(figure)
     print(f"Saved training plot to: {plot_path}")
 
+
+
+def evaluate_test(model, test_loader, criterion, device, run_dir):
+    """Evaluates the test set once after training without updating the model"""
+    model.eval()
+    total_loss = 0.0
+    all_labels = []
+    all_predictions = []
+    all_ad_probabilities = []
+
+    with torch.no_grad():
+        for images, labels in test_loader:
+            images = images.to(device)
+            labels = labels.to(device)
+            outputs = model(images) # forward pass
+            loss = criterion(outputs, labels) # calculatee loss
+
+            # softmax probabilities are used for AUC and confidence statistics
+            probabilities = torch.softmax(outputs, dim=1)
+            total_loss += loss.item() * labels.size(0)
+            all_labels.extend(labels.cpu().tolist())
+            all_predictions.extend(outputs.argmax(dim=1).cpu().tolist())
+            all_ad_probabilities.extend(
+                probabilities[:, LABEL_MAP["AD"]].cpu().tolist()
+            )
+
 def main():
     start_time = datetime.now()
 
@@ -174,6 +200,9 @@ def main():
     total_seconds = int(elapsed.total_seconds())
     minutes, seconds = divmod(total_seconds, 60)
     print(f"Training completed in {minutes}m {seconds}s")
+
+    # evaluate the model on the test set
+    evaluate_test(model, test_loader, criterion, device, run_dir)
 
 
 if __name__ == "__main__":
