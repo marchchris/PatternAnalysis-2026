@@ -117,7 +117,7 @@ def save_test_report(labels, predictions, ad_probabilities, test_loss, run_dir):
 
     # format the test metrics as a readable report
     report_lines = [
-        "Test Set Evaluation Report:",
+        "\nTest Set Evaluation Report:",
         f"Test loss: {test_loss:.4f}",
         f"Accuracy: {accuracy:.4f}",
         f"Precision (AD positive): {precision[1]:.4f}",
@@ -126,7 +126,7 @@ def save_test_report(labels, predictions, ad_probabilities, test_loss, run_dir):
         f"ROC AUC: {roc_auc:.4f}",
         f"Support: {support[0] + support[1]}",
         f"Negative support: {support[0]}",
-        f"Positive support: {support[1]}",
+        f"Positive support: {support[1]}\n",
     ]
     report_text = "\n".join(report_lines)
 
