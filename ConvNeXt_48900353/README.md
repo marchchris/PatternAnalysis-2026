@@ -10,3 +10,13 @@ The pipeline associates each image with a patient using the `meta_data_with_labe
 </p>
 
 *Figure 1: The implemented data and model pipeline for this project.*
+
+## 2. Feasibility Review
+
+### User Need and Scope
+The intended user this project is aimed towards is a researcher evaluating a machine learning model that could assist human reviewers in diagnosing Alzheimer's disease from MRI images. The project scope is limited to training and evaluating the models on the course-provided 2D ADNI MRI images, it will not combine multiple brain slices from the same patient to produce a prediction.
+
+### Acceptance Criteria
+1. Every included ADNI image has a valid mapping to a patient, and the training, validation, and testing set has no patient leakage.
+2. ConvNeXt achieves a test accuracy of atleast `80%`.
+3. Training fits within the selected GPU's memory budget, and uses a maximum of `90%` of the available memory.
