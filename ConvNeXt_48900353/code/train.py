@@ -3,6 +3,7 @@ from pathlib import Path
 import torch
 from torch import nn
 import matplotlib.pyplot as plt
+from sklearn.metrics import accuracy_score, confusion_matrix, precision_recall_fscore_support, roc_auc_score
 
 from config import LABEL_MAP, SEED, DATASET_ROOT, METADATA_PATH
 from dataset import create_dataloaders
@@ -10,7 +11,7 @@ from modules import build_model
 
 MODEL_NAME = "resnet18"
 BATCH_SIZE = 512
-EPOCHS = 2
+EPOCHS = 1
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 1e-4
 NUM_WORKERS = 4
@@ -96,6 +97,70 @@ def save_training_plot(history, run_dir):
     plt.close(figure)
     print(f"Saved training plot to: {plot_path}")
 
+def save_test_report(labels, predictions, ad_probabilities, test_loss, run_dir):
+    """Calculate, save, and visualize test statistics with AD as the positive class."""
+    # convert the original class labels into binary labels: NC = 0 and AD = 1
+    positive_labels = [1 if label == LABEL_MAP["AD"] else 0 for label in labels]
+    positive_predictions = [1 if pred == LABEL_MAP["AD"] else 0 for pred in predictions]
+
+    # calculate classification metrics using the binary labels
+    accuracy = accuracy_score(positive_labels, positive_predictions)
+    precision, recall, f1, support = precision_recall_fscore_support(
+        positive_labels,
+        positive_predictions,
+        labels=[0, 1],
+        zero_division=0,
+    )
+    # build a confusion matrix and calculate the ROC AUC from AD probabilities
+    confusion = confusion_matrix(positive_labels, positive_predictions, labels=[0, 1])
+    roc_auc = roc_auc_score(positive_labels, ad_probabilities)
+
+    # format the test metrics as a readable report
+    report_lines = [
+        "Test Set Evaluation Report:",
+        f"Test loss: {test_loss:.4f}",
+        f"Accuracy: {accuracy:.4f}",
+        f"Precision (AD positive): {precision[1]:.4f}",
+        f"Recall (AD positive): {recall[1]:.4f}",
+        f"F1 Score (AD positive): {f1[1]:.4f}",
+        f"ROC AUC: {roc_auc:.4f}",
+        f"Support: {support[0] + support[1]}",
+        f"Negative support: {support[0]}",
+        f"Positive support: {support[1]}",
+    ]
+    report_text = "\n".join(report_lines)
+
+    # save the report to the current run directory and print it
+    report_path = run_dir / "test_report.txt"
+    report_path.write_text(report_text, encoding="utf-8")
+    print(report_text)
+    print(f"Saved test statistics to: {report_path}")
+
+    # create confusion matrix plot
+    confusion_figure, confusion_axis = plt.subplots(figsize=(5, 4))
+    confusion_image = confusion_axis.imshow(confusion, cmap="Blues")
+    confusion_axis.set_title("Confusion Matrix")
+    confusion_axis.set_xlabel("Predicted label")
+    confusion_axis.set_ylabel("True label")
+    confusion_axis.set_xticks([0, 1])
+    confusion_axis.set_yticks([0, 1])
+    confusion_axis.set_xticklabels(["NC", "AD"])
+    confusion_axis.set_yticklabels(["NC", "AD"])
+
+    # display each confusion-matrix count
+    for row in range(confusion.shape[0]):
+        for col in range(confusion.shape[1]):
+            value = confusion[row, col]
+            color = "white" if value > confusion.max() / 2 else "black"
+            confusion_axis.text(col, row, str(value), ha="center", va="center", color=color)
+
+    # save the confusion matrix plot under the run directory
+    confusion_figure.colorbar(confusion_image, ax=confusion_axis)
+    confusion_figure.tight_layout()
+    confusion_plot_path = run_dir / "confusion_matrix.png"
+    confusion_figure.savefig(confusion_plot_path, dpi=150)
+    plt.close(confusion_figure)
+    print(f"Saved confusion matrix image to: {confusion_plot_path}")
 
 
 def evaluate_test(model, test_loader, criterion, device, run_dir):
@@ -121,6 +186,10 @@ def evaluate_test(model, test_loader, criterion, device, run_dir):
             all_ad_probabilities.extend(
                 probabilities[:, LABEL_MAP["AD"]].cpu().tolist()
             )
+
+    # save test statistics to run directory
+    test_loss = total_loss / len(all_labels)
+    save_test_report(all_labels, all_predictions, all_ad_probabilities, test_loss, run_dir)
 
 def main():
     start_time = datetime.now()
