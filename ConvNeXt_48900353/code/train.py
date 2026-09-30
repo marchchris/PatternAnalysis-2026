@@ -10,7 +10,7 @@ from modules import build_model
 
 MODEL_NAME = "resnet18"
 BATCH_SIZE = 512
-EPOCHS = 10
+EPOCHS = 2
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 1e-4
 NUM_WORKERS = 4
@@ -97,6 +97,8 @@ def save_training_plot(history, run_dir):
     print(f"Saved training plot to: {plot_path}")
 
 def main():
+    start_time = datetime.now()
+
     # allow reproducibility
     torch.manual_seed(SEED)
     if torch.cuda.is_available():
@@ -167,6 +169,11 @@ def main():
 
     # save training plot under the run directory
     save_training_plot(history, run_dir)
+
+    elapsed = datetime.now() - start_time
+    total_seconds = int(elapsed.total_seconds())
+    minutes, seconds = divmod(total_seconds, 60)
+    print(f"Training completed in {minutes}m {seconds}s")
 
 
 if __name__ == "__main__":
