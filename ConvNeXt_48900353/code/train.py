@@ -11,7 +11,7 @@ from modules import build_model
 
 MODEL_NAME = "resnet18"
 BATCH_SIZE = 512
-EPOCHS = 2
+EPOCHS = 100
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 1e-4
 NUM_WORKERS = 4
