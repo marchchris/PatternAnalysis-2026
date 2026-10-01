@@ -44,6 +44,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", choices=["resnet18", "convnext"], required=True)
     parser.add_argument("--weights", required=True, help="Path to the saved .pth file")
+    parser.add_argument("--image", help="Optional single image to predict")
+    parser.add_argument("--num-images", type=int, default=9, help="Number of test examples")
+    parser.add_argument("--dataset-root", default=DATASET_ROOT)
+    parser.add_argument("--metadata-path", default=METADATA_PATH)
+    parser.add_argument("--output", default="predictions.png", help="Output figure path")
     args = parser.parse_args()
 
     if args.num_images < 1:
@@ -70,3 +75,25 @@ def main():
 
         # sample images from test split
         imgs = test_frame.sample(n=args.num_images, random_state=SEED).to_dict("records")
+
+        correct = 0
+        for index, img in enumerate(imgs):
+            image_path = Path(img["image_path"])
+            true_class = img["class_name"]
+            image_tensor, probabilities = predict_image(model, image_path, device)
+            predicted_index = probabilities.argmax().item()
+            predicted_class = index_to_class[predicted_index]
+            confidence = probabilities[predicted_index].item()
+            nc_probability = probabilities[LABEL_MAP["NC"]].item()
+            ad_probability = probabilities[LABEL_MAP["AD"]].item()
+
+            correct += int(predicted_class == true_class)
+            print(
+                f"\nImage: {image_path}\n"
+                f"True: {true_class or 'unknown'} | Predicted: {predicted_class} | "
+                f"Confidence: {confidence:.2%}\n"
+                f"P(NC): {nc_probability:.4f} | P(AD): {ad_probability:.4f}"
+            )
+
+if __name__ == "__main__":
+    main()
