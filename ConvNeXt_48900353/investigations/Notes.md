@@ -12,3 +12,9 @@ Epoch 05/100 | Train loss: 0.0030, accuracy: 100.00% | Val loss: 1.0526, accurac
 Epoch 06/100 | Train loss: 0.0016, accuracy: 100.00% | Val loss: 1.1029, accuracy: 72.43%
 Epoch 07/100 | Train loss: 0.0012, accuracy: 100.00% | Val loss: 1.0628, accuracy: 72.48%
 ```
+
+# 1/10 6:10pm
+
+Added random horizontal flipping, translations/rotations and colour/contrast augmentations to the training set that are reapplied every epoch.
+
+This means every epoch will have a differently augmented images. Hopefully this will be enough to prevent overfitting.

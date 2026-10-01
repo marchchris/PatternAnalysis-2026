@@ -4,6 +4,7 @@ File for dataset loading, loading images, connecting images to patients, creatin
 
 import json
 import re
+from functools import partial
 from pathlib import Path
 
 import pandas as pd
@@ -11,11 +12,23 @@ import torch
 from PIL import Image, ImageOps
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
+from torchvision import transforms
 
 # import constants from config file
 from config import CLASS_NAMES, DATASET_SPLIT_NAMES, DATASET_ROOT, METADATA_PATH, SEED, LABEL_MAP
 
 PATIENT_PATTERN = re.compile(r"ADNI_(\d{3}_S_\d{4})", re.IGNORECASE)
+
+TRAIN_AUGMENTATION = transforms.Compose([
+    transforms.RandomHorizontalFlip(p=0.5), # random horizontal flips
+    transforms.RandomAffine( # small rotations, translations and sclaing
+        degrees=10,
+        translate=(0.05, 0.05),
+        scale=(0.95, 1.05),
+        fill=0,
+    ),
+    transforms.ColorJitter(brightness=0.15, contrast=0.15), # mild brightness and colour changes
+])
 
 
 def patient_id_from_record(record):
@@ -94,8 +107,8 @@ def create_splits(dataset_root, metadata_path, seed=SEED):
 
     return tuple(splits)
 
-def preprocess_image(image):
-    """Returns a preprocessed image as a (3, 256, 256) tensor"""
+def preprocess_image(image, augment=False):
+    """Returns an optionally augmented image as a (3, 256, 256) tensor"""
 
     image = image.convert("L")
     width, height = image.size
@@ -107,6 +120,9 @@ def preprocess_image(image):
     bottom = 256 - height - top
     image = ImageOps.expand(image, border=(left, top, right, bottom), fill=0)
 
+    if augment:
+        image = TRAIN_AUGMENTATION(image)
+
     # copy grayscale values into each of the three RGB channels
     image = image.convert("RGB")
 
@@ -115,7 +131,7 @@ def preprocess_image(image):
     image_tensor = pixels.view(256, 256, 3).permute(2, 0, 1) / 255.0
     return image_tensor
 
-def load_batch(batch):
+def load_batch(batch, augment=False):
     """Load and preprocess a batch of (image_path, class_name) pairs"""
 
     images = []
@@ -123,7 +139,7 @@ def load_batch(batch):
 
     for image_path, class_name in batch:
         with Image.open(image_path) as image:
-            images.append(preprocess_image(image))
+            images.append(preprocess_image(image, augment=augment))
         labels.append(LABEL_MAP[class_name])
 
     return torch.stack(images), torch.tensor(labels, dtype=torch.long)
@@ -146,7 +162,7 @@ def create_dataloaders(dataset_root, metadata_path, batch_size=32, num_workers=0
                 batch_size=batch_size,
                 shuffle=(split_index == 0),  # shuffle only the training split
                 num_workers=num_workers,
-                collate_fn=load_batch,
+                collate_fn=partial(load_batch, augment=(split_index == 0)),
                 generator=torch.Generator().manual_seed(seed), # allow reproducibility
             )
 
