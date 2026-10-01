@@ -254,7 +254,7 @@ def main():
 
     # create a directory for this runs model and plot
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    run_dir = Path("Results") / MODEL_NAME / f"{MODEL_NAME}_{timestamp}"
+    run_dir = Path("Models") / MODEL_NAME / f"{MODEL_NAME}_{timestamp}"
     run_dir.mkdir(parents=True, exist_ok=True)
 
     # save model under the run directory
