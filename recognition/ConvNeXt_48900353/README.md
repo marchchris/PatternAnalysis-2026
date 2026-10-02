@@ -22,4 +22,9 @@ The intended user this project is aimed towards is a researcher evaluating a mac
 3. Training fits within the selected GPU's memory budget, and uses a maximum of `90%` of the available memory.
 
 ### Model Choice and Course Concepts
-ConvNeXt 
+ConvNeXt-Tiny was selected for the hard-difficulty ConvNeXt-ADNI task, with ResNet-18 serving as a smaller CNN baseline. The Tiny variant was chosen to accommodate the memory limitations of the GPU used for training. ResNet-18 was selected as the baseline model for two reasons, the first being it is a familiar model that was previously used in Demo 2. The second reason being that is provides a meaningful comparison between an established residual CNN and a modernised convolutional architecture. In *A ConvNet for 2020s (Liu et al., 2022)*, ConvNeXt was developed by progressively modernising ResNet-50 with design ideas inspired by vision transformers. Their shared use of convolution and residual connections gives the comparison between ConvNeXt and ResNet a clear architectural basis. This will be useful for assessing whether ConvNeXt-Tiny offers improvements in classification peformance and prediction confidence that justify its additional computational cost.
+
+Both models are trained from random initalisation with two outputs to distinguish the AD and NC classes using the provided ADNI 2D MRI images. They will both use the same preproccessing steps of first dividing patients into approximately `70%` training, `20%` validation, and `10%` testing, keeping each patient's scan images in one split to prevent data leakage. Images are then padded to `256 x 256`, converted to three identical grayscale channels, and pixel values are normalised to `[0, 1]`. If during training overfitting occurs, data augmentation to the training set will also be implemented.
+
+## References
+- 1. Liu, Z., Mao, H., Wu, C.-Y., Feichtenhofer, C., Darrell, T., Xie, S., Facebook, A., & Research. (2022). A ConvNet for the 2020s. https://arxiv.org/pdf/2201.03545
