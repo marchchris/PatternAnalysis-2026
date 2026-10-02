@@ -20,3 +20,6 @@ The intended user this project is aimed towards is a researcher evaluating a mac
 1. Every included ADNI image has a valid mapping to a patient, and the training, validation, and testing set has no patient leakage.
 2. ConvNeXt achieves a test accuracy of atleast `80%`.
 3. Training fits within the selected GPU's memory budget, and uses a maximum of `90%` of the available memory.
+
+### Model Choice and Course Concepts
+ConvNeXt 
