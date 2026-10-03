@@ -97,7 +97,14 @@ def save_training_plot(history, run_dir):
     plt.close(figure)
     print(f"Saved training plot to: {plot_path}")
 
-def save_test_report(labels, predictions, ad_probabilities, test_loss, run_dir):
+def save_test_report(
+    labels,
+    predictions,
+    ad_probabilities,
+    test_loss,
+    training_seconds,
+    run_dir,
+):
     """Calculate, save, and visualize test statistics with AD as the positive class."""
     # convert the original class labels into binary labels: NC = 0 and AD = 1
     positive_labels = [1 if label == LABEL_MAP["AD"] else 0 for label in labels]
@@ -116,7 +123,13 @@ def save_test_report(labels, predictions, ad_probabilities, test_loss, run_dir):
     roc_auc = roc_auc_score(positive_labels, ad_probabilities)
 
     # format the test metrics as a readable report
+    training_minutes, training_remaining_seconds = divmod(
+        int(training_seconds), 60
+    )
     report_lines = [
+        "\nModel Training Report:"
+        f"Training time: {training_minutes}m {training_remaining_seconds}s\n",
+
         "\nTest Set Evaluation Report:",
         f"Test loss: {test_loss:.4f}",
         f"Accuracy: {accuracy:.4f}",
@@ -163,7 +176,14 @@ def save_test_report(labels, predictions, ad_probabilities, test_loss, run_dir):
     print(f"Saved confusion matrix image to: {confusion_plot_path}")
 
 
-def evaluate_test(model, test_loader, criterion, device, run_dir):
+def evaluate_test(
+    model,
+    test_loader,
+    criterion,
+    device,
+    training_seconds,
+    run_dir,
+):
     """Evaluates the test set once after training without updating the model"""
     model.eval()
     total_loss = 0.0
@@ -189,18 +209,23 @@ def evaluate_test(model, test_loader, criterion, device, run_dir):
 
     # save test statistics to run directory
     test_loss = total_loss / len(all_labels)
-    save_test_report(all_labels, all_predictions, all_ad_probabilities, test_loss, run_dir)
+    save_test_report(
+        all_labels,
+        all_predictions,
+        all_ad_probabilities,
+        test_loss,
+        training_seconds,
+        run_dir,
+    )
 
 def main():
-    start_time = datetime.now()
-
     # allow reproducibility
     torch.manual_seed(SEED)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(SEED)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Model: {MODEL_NAME} - Device: {device}")
+    print(f"Model: {MODEL_NAME} training on: {torch.cuda.get_device_name(device)}")
 
     # get train, validation, and test data loaders
     train_loader, val_loader, test_loader = create_dataloaders(
@@ -223,6 +248,7 @@ def main():
     history = []
 
     # main training loop
+    training_start_time = datetime.now()
     print("\n--- Beginning Training ---")
     for epoch in range(1, EPOCHS + 1):
         # run training epoch
@@ -251,6 +277,8 @@ def main():
         )
 
     print("\n--- Finished Training ---")
+    training_elapsed = datetime.now() - training_start_time
+    training_seconds = int(training_elapsed.total_seconds())
 
     # create a directory for this runs model and plot
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
@@ -265,13 +293,18 @@ def main():
     # save training plot under the run directory
     save_training_plot(history, run_dir)
 
-    elapsed = datetime.now() - start_time
-    total_seconds = int(elapsed.total_seconds())
-    minutes, seconds = divmod(total_seconds, 60)
+    minutes, seconds = divmod(training_seconds, 60)
     print(f"Training completed in {minutes}m {seconds}s")
 
     # evaluate the model on the test set
-    evaluate_test(model, test_loader, criterion, device, run_dir)
+    evaluate_test(
+        model,
+        test_loader,
+        criterion,
+        device,
+        training_seconds,
+        run_dir,
+    )
 
 
 if __name__ == "__main__":
