@@ -9,9 +9,9 @@ from config import LABEL_MAP, SEED, DATASET_ROOT, METADATA_PATH
 from dataset import create_dataloaders
 from modules import build_model
 
-MODEL_NAME = "resnet18"
+MODEL_NAME = "convnext"
 BATCH_SIZE = 512
-EPOCHS = 100
+EPOCHS = 200
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 1e-4
 NUM_WORKERS = 4
