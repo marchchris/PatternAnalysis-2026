@@ -245,6 +245,15 @@ def main():
         model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
     )
 
+    # reduce learning rate when val loss stops improving
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer,
+        mode="min", # lower validation loss is better
+        factor=0.5, # halve the learning rate
+        patience=4, # allow 4 epochs without improvement
+        min_lr=1e-6, # minimum learning rate
+    )
+
     history = []
 
     # main training loop
@@ -260,6 +269,14 @@ def main():
         val_loss, val_accuracy = run_epoch(
             model, val_loader, criterion, device
         )
+
+        # update learning rate based on validation loss
+        previous_lr = optimizer.param_groups[0]["lr"]
+        scheduler.step(val_loss)
+        current_lr = optimizer.param_groups[0]["lr"]
+
+        if current_lr < previous_lr:
+            print(f"\nLearning rate reduced: " f"{previous_lr:.2e} -> {current_lr:.2e}")
 
         # add current epoch results to history
         history.append({
