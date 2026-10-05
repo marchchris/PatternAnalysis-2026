@@ -20,7 +20,7 @@ The pipeline associates each image with a patient using the `meta_data_with_labe
 | TorchVision constructor | `resnet18(weights=None)` | `convnext_base(weights=None)` |
 | Residual blocks per stage | 2, 2, 2, 2 | 3, 3, 9, 3 |
 | Stage channels | 64, 128, 256, 512 | 96, 192, 384, 768 |
-| Classification layer | 512 → 2 | 768 → 2 |
+| Classification layer | 512 to 2 | 768 to 2 |
 | Initialisation and training | Randomly initalised weights | Randomly initalised weights |
 
 
@@ -36,7 +36,7 @@ The intended user this project is aimed towards is a researcher evaluating a mac
 3. Training fits within the selected GPU's memory budget, and uses a maximum of `90%` of the available memory.
 
 ### Model Choice and Course Concepts
-ConvNeXt-Tiny was selected for the hard-difficulty ConvNeXt-ADNI task, with ResNet-18 serving as a smaller CNN baseline. The Tiny variant was chosen to accommodate the memory limitations of the GPU used for training. ResNet-18 was selected as the baseline model for two reasons, the first being it is a familiar model that was previously used in Demo 2 (COMP3710 Teaching Team, 2026). The second reason being that is provides a meaningful comparison between an established residual CNN and a modernised convolutional architecture. In *A ConvNet for 2020s (Liu et al., 2022)*, ConvNeXt was developed by progressively modernising ResNet-50 with design ideas inspired by vision transformers. Their shared use of convolution and residual connections gives the comparison between ConvNeXt and ResNet a clear architectural basis. This will be useful for assessing whether ConvNeXt-Tiny offers improvements in classification peformance and prediction confidence that justify its additional computational cost.
+ConvNeXt-Tiny was selected for the hard-difficulty ConvNeXt-ADNI task, with ResNet-18 serving as a smaller CNN baseline. The Tiny variant was chosen to accommodate the memory limitations of the GPU used for training. ResNet-18 was selected as the baseline model for two reasons, the first being it is a familiar model that was previously used in Demo 2 *(COMP3710 Teaching Team, 2026) [2]*. The second reason being that is provides a meaningful comparison between an established residual CNN and a modernised convolutional architecture. In *A ConvNet for 2020s (Liu et al., 2022) [1]*, ConvNeXt was developed by progressively modernising ResNet-50 with design ideas inspired by vision transformers. Their shared use of convolution and residual connections gives the comparison between ConvNeXt and ResNet a clear architectural basis. This will be useful for assessing whether ConvNeXt-Tiny offers improvements in classification peformance and prediction confidence that justify its additional computational cost.
 
 Both models are trained from random initalisation with two outputs to distinguish the AD and NC classes using the provided ADNI 2D MRI images. They will both use the same preproccessing steps of first dividing patients into approximately `70%` training, `20%` validation, and `10%` testing, keeping each patient's scan images in one split to prevent data leakage. Images are then padded to `256 x 256`, converted to three identical grayscale channels, and pixel values are normalised to `[0, 1]`. If during training overfitting occurs, data augmentation to the training set will also be implemented.
 
@@ -106,7 +106,23 @@ The code seeds PyTorch, CUDA, data loaders, and patient splitting. Due to this t
 To change the result of a training run, change the `SEED` in `config.py` to a different value.
 
 
+## 5. Preprocessing and Justification of Data Splits
+### 5.1 Data Audit and Patient Identification
+From the investigations conducted in the Jupyter notebooks under the `investigations/` directory on the provided ADNI dataset, the results provided:
 
+| Finding | Evidence |
+|---|---|
+| Image format and dimensions | 30,520 JPEGs, all grayscale, 256 × 240 pixels |
+| Metadata coverage | 2,189 scan records representing 942 patients |
+| Available image coverage | 1,526 scans representing 680 patients |
+| Original folder patient overlap | 565 training patients, 331 test patients, 216 in both |
+| Images associated with overlapping patients | 14,381 in the earlier overlap audit |
+
+Using *(ADNI, n.d.) [5]*, it was discovered that the `raw` field in the `meta_data_with_label.json` metadata file provided with the dataset, supplied the patient ID, for example as `068_S_0473`. It was also found that the prefix of the filename of an image in the dataset was the scan ID of the image. Using these two identifiers, image scans were able to be linked to the patient they came from. The labels for these images came from the directory there were stored in, with `NC = 0` and `AD = 1`.
+
+From the results of the investigations it was found that only `680` out of the `942` patients listed in the metadata file had corresponding images in the dataset. All `30520` images in the dataset were grayscale and exactly `256 x 240` pixels.
+
+### 5.2 Image Preprocessing and Augmentation
 
 
 
