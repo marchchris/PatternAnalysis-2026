@@ -31,11 +31,18 @@ The prelimiary investigations conducted in the jupyter notebooks under `investig
 
 To address this, the preprocessing notebook investigated implementing a stratified split by patient, assigning each patient to one split. This results in `21140` training, `6420` validation, and `2960` test images, approximately matching the intended 70/20/10 proportions. The images were also broadly well balanced between classes, with `15660` NC images, and `14860` AD images.
 
-To assess computational feasibility, an investigation was conducted using the MNIST dataset, with images upscaled to `256 x 256` pixels. After testing various batch sizes on an RTX 5070 Ti, ResNet-18 supported a maximum batch size of `512`, while ConvNeXt-Tiny supported a batch size of up to `128` before exceeding the GPU's available memory.
+To assess computational feasibility, an investigation was conducted using the MNIST dataset, with images upscaled to `256 x 256` pixels. After testing various batch sizes on an Nvidia RTX 5070 Ti, ResNet-18 supported a maximum batch size of `512`, while ConvNeXt-Tiny supported a batch size of up to `128` before exceeding the GPU's available memory.
 
 These finding demonstrate a workable data preparation strategy and provide preliminary evidence that the proposed model configuration is practical on the available hardware.
 
+### Risks, Budget, Next Experiment, and Fallback
+The main risks this project currently has are:
+  - The long model training times.
+  - The A100 GPU's available VRAM.
 
+Long training runs may prevent the models from completing enough epochs to converge before the assignment deadline. Memory limits may also restrict the model size, if the models that fit have insufficient capacity to learn the patterns in the training set, they could underfit.
+
+The nexxt experiment will test difference ConvNeXt and ResNet model sizes and progressively larger batch sizes on the A100. This will establish which combinations fit in memory. If the preferred configurations exceed the memory limit, the fallback is to use smaller ConvNeXt and ResNet models with fewer parameters and reduce the batch size untill training fits with the A100's VRAM.
 
 
 ## References
