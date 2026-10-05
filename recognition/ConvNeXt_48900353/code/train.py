@@ -10,8 +10,9 @@ from dataset import create_dataloaders
 from modules import build_model
 
 MODEL_NAME = "convnext"
-BATCH_SIZE = 512
-EPOCHS = 200
+BATCH_SIZE = 256
+EPOCHS = 100
+WARMUP_EPOCHS = 30 # number of epochs to wait before beginning to reduce learning rate
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 1e-4
 NUM_WORKERS = 4
@@ -250,7 +251,7 @@ def main():
         optimizer,
         mode="min", # lower validation loss is better
         factor=0.5, # halve the learning rate
-        patience=4, # allow 4 epochs without improvement
+        patience=10, # allow 4 epochs without improvement
         min_lr=1e-6, # minimum learning rate
     )
 
@@ -272,7 +273,10 @@ def main():
 
         # update learning rate based on validation loss
         previous_lr = optimizer.param_groups[0]["lr"]
-        scheduler.step(val_loss)
+
+        if epoch > WARMUP_EPOCHS:
+            scheduler.step(val_loss)
+
         current_lr = optimizer.param_groups[0]["lr"]
 
         if current_lr < previous_lr:
