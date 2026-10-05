@@ -122,8 +122,43 @@ Using *(ADNI, n.d.) [5]*, it was discovered that the `raw` field in the `meta_da
 
 From the results of the investigations it was found that only `680` out of the `942` patients listed in the metadata file had corresponding images in the dataset. All `30520` images in the dataset were grayscale and exactly `256 x 240` pixels.
 
-### 5.2 Image Preprocessing and Augmentation
+### 5.2 Image Preprocessing
 
+| Preprocessing Step | Implementation | Justification |
+|---|---|---|
+| Black padding | Pad eight pixels above and below each 256 × 240 image | Use black pixels to upscale image to `256 x 256` as edges of images are already all black pixels, and this gives an image with dimensions of a multiple of 32. |
+| Three channels | `image.convert("RGB")` | Make gray scale image use all 3 colour channels. |
+| Intensity scaling | Pixel values divided by 255 | Map pixel values into range [0, 1] for model. |
+| Channel reordering | `(3, 256, 256)` | Match PyTorchs model input dimensions |
+
+According to *(GeeksforGeeks, 2025) [4]*, ConvNeXt downsamples the input image by a total factor of 32, therefore, image dimensions divisible by 32 will produce whole numbers at each stage. This was the reasoning and justification for upscaling the images up to `256 x 256` pixels.
+
+### 5.3 Data Augmentation
+
+During the first attempt at training the baseline ResNet-18 model on the ADNI dataset, after 5 epochs the model quickly overfit to the training set achieving `100%` training accuracy while plateuing at approximately `72%` validation accuracy.
+
+```
+--- Beginning Training ---
+Epoch 01/100 | Train loss: 0.5095, accuracy: 73.88% | Val loss: 4.3196, accuracy: 46.42%
+Epoch 02/100 | Train loss: 0.2169, accuracy: 91.14% | Val loss: 1.1156, accuracy: 67.12%
+Epoch 03/100 | Train loss: 0.0489, accuracy: 98.67% | Val loss: 1.1133, accuracy: 71.84%
+Epoch 04/100 | Train loss: 0.0092, accuracy: 99.94% | Val loss: 1.0112, accuracy: 70.87%
+Epoch 05/100 | Train loss: 0.0030, accuracy: 100.00% | Val loss: 1.0526, accuracy: 71.68%
+Epoch 06/100 | Train loss: 0.0016, accuracy: 100.00% | Val loss: 1.1029, accuracy: 72.43%
+Epoch 07/100 | Train loss: 0.0012, accuracy: 100.00% | Val loss: 1.0628, accuracy: 72.48%
+```
+
+*Figure 2: First 7 epochs of training ResNet-18 model of ADNI dataset without data augmentation.*
+
+To address this issue data augmentation was introduced on the training set only. The augmentations that were applied each epoch to the training set are listed below:
+
+
+| Augmentation | Intensity of effect |
+|---|---|
+| Random transformations | Rotation up to `5°`, translation up to `3%` |
+| Color jitter | Brightness and contrast variation of `0.1`|
+
+As all brain scans appear to present in the same orientation, augmentations like flipping and mirroring were not used. 
 
 
 
