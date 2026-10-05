@@ -44,6 +44,29 @@ Long training runs may prevent the models from completing enough epochs to conve
 
 The nexxt experiment will test difference ConvNeXt and ResNet model sizes and progressively larger batch sizes on the A100. This will establish which combinations fit in memory. If the preferred configurations exceed the memory limit, the fallback is to use smaller ConvNeXt and ResNet models with fewer parameters and reduce the batch size untill training fits with the A100's VRAM.
 
+## 3. Project Files and Dependencies
+
+The directories in this project contain:
+
+| Directory | Contains |
+|---|---|
+| `code/` | Source code for creating, training, and running inference on the models. |
+| `investigations/` | Jupyter notebooks for investigating the ADNI images, preprocessing, patient splits, and computational feasibility. |
+| `readme_imgs/` | Images used in this README, including the project pipeline flowchart. |
+
+The main scripts for this project are contained in the `code/` directory and each contain:
+
+| File | Contains |
+|---|---|
+| `config.py` | Dataset paths, seed, class names, label mapping, and source folder names. |
+| `dataset.py` | Metadata parsing, image records, patient splits, preprocessing, and data loaders. |
+| `modules.py` | `build_model()` for ResNet and ConvNeXt |
+| `train.py` | Training, validation, plotting, final weight saving, and test reporting. |
+| `predict.py` | Load trained weights, predict sampled test images or one specified image, print probabilities, and save an annotated figure. |
+
+The necessary dependencies for running the scripts in the `code/` directory are listed in `requirements.txt`.
+
+
 
 ## References
 - 1. Liu, Z., Mao, H., Wu, C.-Y., Feichtenhofer, C., Darrell, T., Xie, S., Facebook, A., & Research. (2022). A ConvNet for the 2020s. https://arxiv.org/pdf/2201.03545
