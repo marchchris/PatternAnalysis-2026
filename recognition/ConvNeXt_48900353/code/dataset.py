@@ -20,15 +20,16 @@ from config import CLASS_NAMES, DATASET_SPLIT_NAMES, DATASET_ROOT, METADATA_PATH
 PATIENT_PATTERN = re.compile(r"ADNI_(\d{3}_S_\d{4})", re.IGNORECASE)
 
 TRAIN_AUGMENTATION = v2.Compose([
-    v2.RandomAffine( # mild rotation and translation changes
-        degrees=5,
-        translate=(0.03, 0.03),
+    v2.RandomAffine(
+        degrees=10,
+        translate=(0.05, 0.05),
+        scale=(0.95, 1.05),
         interpolation=InterpolationMode.BILINEAR,
         fill=0,
     ),
-    v2.ColorJitter( # mild color changes
-        brightness=0.1,
-        contrast=0.1,
+    v2.ColorJitter(
+        brightness=0.15,
+        contrast=0.15,
     ),
 ])
 
