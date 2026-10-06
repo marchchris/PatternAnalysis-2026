@@ -4,6 +4,13 @@ import torch
 from torch import nn
 import matplotlib.pyplot as plt
 from sklearn.metrics import accuracy_score, confusion_matrix, precision_recall_fscore_support, roc_auc_score
+from torch.optim.lr_scheduler import (
+    LinearLR,
+    CosineAnnealingLR,
+    SequentialLR,
+    OneCycleLR,
+    ReduceLROnPlateau,
+)
 
 from config import LABEL_MAP, SEED, DATASET_ROOT, METADATA_PATH
 from dataset import create_dataloaders
@@ -12,9 +19,9 @@ from modules import build_model
 MODEL_NAME = "convnext"
 BATCH_SIZE = 256
 EPOCHS = 100
-WARMUP_EPOCHS = 30 # number of epochs to wait before beginning to reduce learning rate
-LEARNING_RATE = 1e-4
-WEIGHT_DECAY = 1e-4
+WARMUP_EPOCHS = 5 # number of epochs to wait before beginning to reduce learning rate
+LEARNING_RATE = 3e-6
+WEIGHT_DECAY = 0.05
 NUM_WORKERS = 4
 
 def run_epoch(model, loader, criterion, device, optimizer=None, epoch=None):
@@ -246,13 +253,23 @@ def main():
         model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
     )
 
-    # reduce learning rate when val loss stops improving
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    warmup = LinearLR(
         optimizer,
-        mode="min", # lower validation loss is better
-        factor=0.5, # halve the learning rate
-        patience=10, # allow 4 epochs without improvement
-        min_lr=1e-6, # minimum learning rate
+        start_factor=0.01, 
+        end_factor=1.0,
+        total_iters=WARMUP_EPOCHS,
+    )
+
+    cosine = CosineAnnealingLR(
+        optimizer,
+        T_max=EPOCHS - WARMUP_EPOCHS,
+        eta_min=1e-6,
+    )
+
+    scheduler = SequentialLR(
+        optimizer,
+        schedulers=[warmup, cosine],
+        milestones=[WARMUP_EPOCHS],
     )
 
     history = []
@@ -271,16 +288,7 @@ def main():
             model, val_loader, criterion, device
         )
 
-        # update learning rate based on validation loss
-        previous_lr = optimizer.param_groups[0]["lr"]
-
-        if epoch > WARMUP_EPOCHS:
-            scheduler.step(val_loss)
-
-        current_lr = optimizer.param_groups[0]["lr"]
-
-        if current_lr < previous_lr:
-            print(f"\nLearning rate reduced: " f"{previous_lr:.2e} -> {current_lr:.2e}")
+        scheduler.step()
 
         # add current epoch results to history
         history.append({
