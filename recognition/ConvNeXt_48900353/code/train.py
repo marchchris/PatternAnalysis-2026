@@ -13,7 +13,7 @@ from modules import build_model
 MODEL_NAME = "convnext"
 BATCH_SIZE = 64
 EPOCHS = 100
-LEARNING_RATE = 1e-3
+LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 0.05
 NUM_WORKERS = 4
 
