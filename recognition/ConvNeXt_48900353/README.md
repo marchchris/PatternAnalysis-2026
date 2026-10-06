@@ -1,33 +1,6 @@
 # ADNI MRI Classifcation
 
-## 1. Problem and Approach
-This project investigates binary classifcation of two dimensional ADNI brain MRI images into Alzheimer's disease (AD) and congnitively normal (NC) classes. ConvNeXt-Base is the selected advanced model, and ResNet-18 provides a standard performance baseline. The engineering question is whether ConvNeXt improves prediction quality and the handling of uncertain cases enough to justify its increased computational cost. A successful model will achieve a minimum test accuracy of `0.80` for the ConvNeXt task, together with a significant increase in performance compared to the baseline model.
-
-The pipeline associates each image with a patient using the `meta_data_with_label.json` file provided with the ADNI dataset. First, the training and testing image splits from the dataset are combined, then the patients are split into `70%` training, `20%` validation, and `10%` testing. The images are then placed into the split with their associated patient. This ensures that there is no patient leakage across the splits. Images are padded with black pixels to upscale them to `256 x 256` pixels, converted to three identical grayscale channels, and pixel values are normalized to values within `[0, 1]`. A selected model produces two class logits and is trained from random initalisation using cross-entropy loss and the AdamW optimizer. Each epoch random data augmentation is applied to the training set to help prevent the model overfitting to the training set. Validation runs after every epoch and after training completes, the final model weights are saved and the model is evaluated against the test set to measure performance. 
-
-The `predict.py` script can then be used to load a saved model, and run inferencce on sampled test images from the training set or one supplied image. It prints the class probabilities of each prediction and saves an annotated figure of the models predictions.
-
-<p align="center">
-  <img src="readme_imgs\flowchart.png" alt="Flowchart" width="300">
-</p>
-
-*Figure 1: The implemented data and model pipeline for this project.*
-
-### Architecture and Implementation
-
-|  | ResNet | ConvNeXt |
-|---|---|---|
-| Role | Baseline CNN | Selected advanced model |
-| Model name in code | `resnet18` | `convnext` |
-| TorchVision constructor | `resnet18(weights=None)` | `convnext_base(weights=None)` |
-| Residual blocks per stage | 2, 2, 2, 2 | 3, 3, 9, 3 |
-| Stage channels | 64, 128, 256, 512 | 96, 192, 384, 768 |
-| Classification layer | 512 to 2 | 768 to 2 |
-| Initialisation and training | Randomly initalised weights | Randomly initalised weights |
-
-
-
-## 2. Feasibility Review
+## 1. Feasibility Review
 
 ### User Need and Scope
 The intended user this project is aimed towards is a researcher evaluating a machine learning model that could assist human reviewers in diagnosing Alzheimer's disease from MRI images. The project scope is limited to training and evaluating the models on the course-provided 2D ADNI MRI images, it will not combine multiple brain slices from the same patient to produce a prediction.
@@ -35,7 +8,8 @@ The intended user this project is aimed towards is a researcher evaluating a mac
 ### Acceptance Criteria
 1. Every included ADNI image has a valid mapping to a patient, and the training, validation, and testing set has no patient leakage.
 2. ConvNeXt achieves a test accuracy of atleast `80%`.
-3. Training fits within the selected GPU's memory budget, and uses a maximum of `90%` of the available memory.
+3. The ConvNeXt model achieves a higher test accuracy than the baseline ResNet model.
+4. Training fits within the provided Nvidia A100 GPUs available memory.
 
 ### Model Choice and Course Concepts
 ConvNeXt-Base was selected for the hard-difficulty ConvNeXt-ADNI task, with ResNet-18 serving as a smaller CNN baseline. The Base variant was chosen to accommodate the memory limitations of the GPU used for training. ResNet-18 was selected as the baseline model for two reasons, the first being it is a familiar model that was previously used in Demo 2 *(COMP3710 Teaching Team, 2026) [2]*. The second reason being that is provides a meaningful comparison between an established residual CNN and a modernised convolutional architecture. In *A ConvNet for 2020s (Liu et al., 2022) [1]*, ConvNeXt was developed by progressively modernising ResNet-50 with design ideas inspired by vision transformers. Their shared use of convolution and residual connections gives the comparison between ConvNeXt and ResNet a clear architectural basis. This will be useful for assessing whether ConvNeXt-Base offers improvements in classification peformance and prediction confidence that justify its additional computational cost.
@@ -60,6 +34,31 @@ Long training runs may prevent the models from completing enough epochs to conve
 
 The next experiment will test difference ConvNeXt and ResNet model sizes and progressively larger batch sizes on the A100. This will establish which combinations fit in memory. If the preferred configurations exceed the memory limit, the fallback is to use smaller ConvNeXt and ResNet models with fewer parameters and reduce the batch size untill training fits with the A100's VRAM.
 
+## 2. Problem and Approach
+This project investigates binary classifcation of two dimensional ADNI brain MRI images into Alzheimer's disease (AD) and congnitively normal (NC) classes. ConvNeXt-Base is the selected advanced model, and ResNet-18 provides a standard performance baseline. The engineering question is whether ConvNeXt improves prediction quality and the handling of uncertain cases enough to justify its increased computational cost. A successful model will achieve a minimum test accuracy of `0.80` for the ConvNeXt task, together with a significant increase in performance compared to the baseline model.
+
+The pipeline associates each image with a patient using the `meta_data_with_label.json` file provided with the ADNI dataset. First, the training and testing image splits from the dataset are combined, then the patients are split into `70%` training, `20%` validation, and `10%` testing. The images are then placed into the split with their associated patient. This ensures that there is no patient leakage across the splits. Images are padded with black pixels to upscale them to `256 x 256` pixels, converted to three identical grayscale channels, and pixel values are normalized to values within `[0, 1]`. A selected model produces two class logits and is trained from random initalisation using cross-entropy loss and the AdamW optimizer. Each epoch random data augmentation is applied to the training set to help prevent the model overfitting to the training set. Validation runs after every epoch and after training completes, the final model weights are saved and the model is evaluated against the test set to measure performance. 
+
+The `predict.py` script can then be used to load a saved model, and run inferencce on sampled test images from the training set or one supplied image. It prints the class probabilities of each prediction and saves an annotated figure of the models predictions.
+
+<p align="center">
+  <img src="readme_imgs\flowchart.png" alt="Flowchart" width="300">
+</p>
+
+*Figure 1: The implemented data and model pipeline for this project.*
+
+### Architecture and Implementation
+
+|  | ResNet | ConvNeXt |
+|---|---|---|
+| Role | Baseline CNN | Selected advanced model |
+| Model name in code | `resnet18` | `convnext` |
+| TorchVision constructor | `resnet18(weights=None)` | `convnext_base(weights=None)` |
+| Residual blocks per stage | 2, 2, 2, 2 | 3, 3, 9, 3 |
+| Stage channels | 64, 128, 256, 512 | 96, 192, 384, 768 |
+| Classification layer | 512 to 2 | 768 to 2 |
+| Initialisation and training | Randomly initalised weights | Randomly initalised weights |
+
 ## 3. Project Files and Dependencies
 
 The directories in this project contain:
@@ -82,34 +81,8 @@ The main scripts for this project are contained in the `code/` directory and eac
 
 The necessary dependencies for running the scripts in the `code/` directory are listed in `requirements.txt`.
 
-## 4. Configuration and Reproducibility Controls
-
-The shared configuration file uses:
-```
-SEED = 42
-```
-
-The set training settings are:
-
-| Setting | Value |
-|---|---|
-| Batch size | 256 |
-| Epochs | 100 |
-| Optimiser | AdamW |
-| Learning rate / weight decay | `1e-4` / `1e-4` |
-| Loss | Unweighted cross-entropy |
-| Data-loader workers | 4 |
-| Numeric precision | Float32 with automatic mixed precision disabled |
-| Training shuffle | Enabled; validation/test shuffle disabled |
-| Saved checkpoint | Final epoch |
-
-The code seeds PyTorch, CUDA, data loaders, and patient splitting. Due to this the splits are recreated and model weights are recreated each run allowing for reproducibility between runs with the same settings.
-
-To change the result of a training run, change the `SEED` in `config.py` to a different value.
-
-
-## 5. Preprocessing and Justification of Data Splits
-### 5.1 Data Audit and Patient Identification
+## 4. Preprocessing and Justification of Data Splits
+### 4.1 Data Audit and Patient Identification
 From the investigations conducted in the Jupyter notebooks under the `investigations/` directory on the provided ADNI dataset, the results provided:
 
 | Finding | Evidence |
@@ -124,7 +97,7 @@ Using *(ADNI, n.d.) [5]*, it was discovered that the `raw` field in the `meta_da
 
 From the results of the investigations it was found that only `680` out of the `942` patients listed in the metadata file had corresponding images in the dataset. All `30520` images in the dataset were grayscale and exactly `256 x 240` pixels.
 
-### 5.2 Image Preprocessing
+### 4.2 Image Preprocessing
 
 | Preprocessing Step | Implementation | Justification |
 |---|---|---|
@@ -134,34 +107,6 @@ From the results of the investigations it was found that only `680` out of the `
 | Channel reordering | `(3, 256, 256)` | Match PyTorchs model input dimensions |
 
 According to *(GeeksforGeeks, 2025) [4]*, ConvNeXt downsamples the input image by a total factor of 32, therefore, image dimensions divisible by 32 will produce whole numbers at each stage. This was the reasoning and justification for upscaling the images up to `256 x 256` pixels.
-
-### 5.3 Data Augmentation
-
-During the first attempt at training the baseline ResNet-18 model on the ADNI dataset, after 5 epochs the model quickly overfit to the training set achieving `100%` training accuracy while plateuing at approximately `72%` validation accuracy.
-
-```
---- Beginning Training ---
-Epoch 01/100 | Train loss: 0.5095, accuracy: 73.88% | Val loss: 4.3196, accuracy: 46.42%
-Epoch 02/100 | Train loss: 0.2169, accuracy: 91.14% | Val loss: 1.1156, accuracy: 67.12%
-Epoch 03/100 | Train loss: 0.0489, accuracy: 98.67% | Val loss: 1.1133, accuracy: 71.84%
-Epoch 04/100 | Train loss: 0.0092, accuracy: 99.94% | Val loss: 1.0112, accuracy: 70.87%
-Epoch 05/100 | Train loss: 0.0030, accuracy: 100.00% | Val loss: 1.0526, accuracy: 71.68%
-Epoch 06/100 | Train loss: 0.0016, accuracy: 100.00% | Val loss: 1.1029, accuracy: 72.43%
-Epoch 07/100 | Train loss: 0.0012, accuracy: 100.00% | Val loss: 1.0628, accuracy: 72.48%
-```
-
-*Figure 2: First 7 epochs of training ResNet-18 model of ADNI dataset without data augmentation.*
-
-To address this issue data augmentation was introduced on the training set only. The augmentations that were applied each epoch to the training set are listed below:
-
-
-| Augmentation | Intensity of effect |
-|---|---|
-| Random transformations | Rotation up to `5°`, translation up to `3%` |
-| Color jitter | Brightness and contrast variation of `0.1`|
-
-As all brain scans appear to present in the same orientation, augmentations like flipping and mirroring were not used. 
-
 
 
 ## References
