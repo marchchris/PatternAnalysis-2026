@@ -14,7 +14,7 @@ MODEL_NAME = "convnext"
 BATCH_SIZE = 64
 EPOCHS = 100
 LEARNING_RATE = 1e-4
-WEIGHT_DECAY = 0.05
+WEIGHT_DECAY = 1e-4
 NUM_WORKERS = 4
 
 def run_epoch(model, loader, criterion, device, optimizer=None, epoch=None):
@@ -246,7 +246,6 @@ def main():
         model.parameters(),
         lr=LEARNING_RATE,
         weight_decay=WEIGHT_DECAY,
-        betas=(0.9, 0.999),
     )
 
     scheduler = CosineAnnealingLR(

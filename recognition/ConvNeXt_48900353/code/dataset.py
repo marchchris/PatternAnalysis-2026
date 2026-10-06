@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 import torch
+import matplotlib.pyplot as plt
 from PIL import Image, ImageOps
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
@@ -20,16 +21,14 @@ from config import CLASS_NAMES, DATASET_SPLIT_NAMES, DATASET_ROOT, METADATA_PATH
 PATIENT_PATTERN = re.compile(r"ADNI_(\d{3}_S_\d{4})", re.IGNORECASE)
 
 TRAIN_AUGMENTATION = v2.Compose([
+    v2.RandomHorizontalFlip(p=0.5),
     v2.RandomAffine(
-        degrees=10,
-        translate=(0.05, 0.05),
-        scale=(0.95, 1.05),
+        degrees=15,
+        translate=(0.1, 0.1),
+        scale=(0.8, 1.2),
+        shear=(-5.0, 5.0),
         interpolation=InterpolationMode.BILINEAR,
         fill=0,
-    ),
-    v2.ColorJitter(
-        brightness=0.15,
-        contrast=0.15,
     ),
 ])
 
@@ -173,9 +172,37 @@ def create_dataloaders(dataset_root, metadata_path, batch_size=32, num_workers=0
 
     return tuple(loaders)
 
+def show_examples(images, labels, count=6):
+    """Display a few images and their class labels from a batch"""
+
+    count = min(count, images.size(0))
+
+    # arrange up to three images per row
+    columns = min(count, 3)
+    rows = (count + columns - 1) // columns
+
+    # create one subplot for each position in the image grid
+    figure, axes = plt.subplots(rows, columns, figsize=(4 * columns, 4 * rows), squeeze=False)
+    axes = axes.ravel()
+
+    for index in range(count):
+        axes[index].imshow(images[index].permute(1, 2, 0).numpy())
+
+        # use the label to retrieve and display the class name
+        axes[index].set_title(CLASS_NAMES[labels[index].item()])
+        axes[index].axis("off")
+
+    # hide any unused subplot positions in the grid
+    for axis in axes[count:]:
+        axis.axis("off")
+
+    figure.tight_layout()
+    plt.show()
+
 if __name__ == "__main__":
     train_loader, val_loader, test_loader = create_dataloaders(DATASET_ROOT, METADATA_PATH)
     images, labels = next(iter(train_loader))
     print(f"\nImage batch shape: {images.shape}")
     print(f"Label batch shape: {labels.shape}")
     print(f"Pixel range: {images.min().item():.3f} to {images.max().item():.3f}")
+    show_examples(images, labels)
