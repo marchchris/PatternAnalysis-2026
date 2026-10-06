@@ -4,23 +4,16 @@ import torch
 from torch import nn
 import matplotlib.pyplot as plt
 from sklearn.metrics import accuracy_score, confusion_matrix, precision_recall_fscore_support, roc_auc_score
-from torch.optim.lr_scheduler import (
-    LinearLR,
-    CosineAnnealingLR,
-    SequentialLR,
-    OneCycleLR,
-    ReduceLROnPlateau,
-)
+from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from config import LABEL_MAP, SEED, DATASET_ROOT, METADATA_PATH
 from dataset import create_dataloaders
 from modules import build_model
 
 MODEL_NAME = "convnext"
-BATCH_SIZE = 256
+BATCH_SIZE = 64
 EPOCHS = 100
-WARMUP_EPOCHS = 5 # number of epochs to wait before beginning to reduce learning rate
-LEARNING_RATE = 3e-6
+LEARNING_RATE = 1e-3
 WEIGHT_DECAY = 0.05
 NUM_WORKERS = 4
 
@@ -135,7 +128,7 @@ def save_test_report(
         int(training_seconds), 60
     )
     report_lines = [
-        "\nModel Training Report:"
+        "\nModel Training Report:\n"
         f"Training time: {training_minutes}m {training_remaining_seconds}s\n",
 
         "\nTest Set Evaluation Report:",
@@ -246,30 +239,20 @@ def main():
 
     # create model and move to GPU
     model = build_model(MODEL_NAME, num_classes=len(LABEL_MAP)).to(device)
-    criterion = nn.CrossEntropyLoss() # use Cross Entropy Loss
 
-    # use adam optimizer
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.05)
+
     optimizer = torch.optim.AdamW(
-        model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
+        model.parameters(),
+        lr=LEARNING_RATE,
+        weight_decay=WEIGHT_DECAY,
+        betas=(0.9, 0.999),
     )
 
-    warmup = LinearLR(
+    scheduler = CosineAnnealingLR(
         optimizer,
-        start_factor=0.01, 
-        end_factor=1.0,
-        total_iters=WARMUP_EPOCHS,
-    )
-
-    cosine = CosineAnnealingLR(
-        optimizer,
-        T_max=EPOCHS - WARMUP_EPOCHS,
+        T_max=EPOCHS - 1,
         eta_min=1e-6,
-    )
-
-    scheduler = SequentialLR(
-        optimizer,
-        schedulers=[warmup, cosine],
-        milestones=[WARMUP_EPOCHS],
     )
 
     history = []
@@ -288,7 +271,9 @@ def main():
             model, val_loader, criterion, device
         )
 
-        scheduler.step()
+        # Set the learning rate for the next epoch.
+        if epoch < EPOCHS:
+            scheduler.step()
 
         # add current epoch results to history
         history.append({
