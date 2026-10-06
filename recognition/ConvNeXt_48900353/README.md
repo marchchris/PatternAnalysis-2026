@@ -21,7 +21,7 @@ The preliminary investigations conducted in the jupyter notebooks under `investi
 
 To address this, the preprocessing notebook investigated implementing a stratified split by patient, assigning each patient to one split. This results in `21140` training, `6420` validation, and `2960` test images, approximately matching the intended 70/20/10 proportions. The images were also broadly well balanced between classes, with `15660` NC images, and `14860` AD images.
 
-To assess computational feasibility, an investigation was conducted using the MNIST dataset, with images upscaled to `256 x 256` pixels. After testing various batch sizes on an Nvidia RTX 5070 Ti, ResNet-18 supported a maximum batch size of `512`, while ConvNeXt-Base supported a batch size of up to `32` before exceeding the GPU's available memory.
+To assess computational feasibility, an investigation was conducted using the MNIST dataset, with images upscaled to `256 x 256` pixels. After testing various batch sizes on an Nvidia RTX 5070 Ti, ResNet-18 supported a maximum batch size of `256`, this was the batch size the original paper *Deep Residual Learning for Image Recognition (He et al., 2015)* for the ResNet model also used, so this will be the batch size used when initally training the ResNet-18 baseline model. ConvNeXt-Base however, only supported a batch size of up to `32` before exceeding the RTX 5070 Ti's available VRAM. However, this will be possible to increase when training on the A100 GPUs.
 
 These finding demonstrate a workable data preparation strategy and provide preliminary evidence that the proposed model configuration is practical on the available hardware.
 
@@ -47,7 +47,7 @@ The `predict.py` script can then be used to load a saved model, and run inferenc
 
 *Figure 1: The implemented data and model pipeline for this project.*
 
-### Architecture and Implementation
+### 2.1 Architecture and Implementation
 
 |  | ResNet | ConvNeXt |
 |---|---|---|
@@ -108,15 +108,23 @@ From the results of the investigations it was found that only `680` out of the `
 
 According to *(GeeksforGeeks, 2025) [4]*, ConvNeXt downsamples the input image by a total factor of 32, therefore, image dimensions divisible by 32 will produce whole numbers at each stage. This was the reasoning and justification for upscaling the images up to `256 x 256` pixels.
 
-### 5.3 Data Augmentation
-### The First Training Run
-During the first attempt at training the baseline ResNet-18 model on the ADNI dataset, after 23 epochs the model quickly overfit to the training set achieving `99%` training accuracy while plateuing at approximately `55%` validation accuracy.
+## 5. Data Augmentation
+### 5.1 The First Training Run
+
+The first attempt at training on the ADNI dataset was using the baseline ResNet-18 model with the following hyperparameters:
+
+| Hyperparameter | Value |
+|---|---|
+| Learning rate | 0.0001 |
+| Batch size | 256 |
+
+The ResNet-18 model was trained for 100 epochs using a Nvidia A100 GPU. However, after 23 epochs the model quickly overfit to the training set achieving `99%` training accuracy while plateuing at approximately `55%` validation accuracy.
 
 ![ResNet Overfitting ](readme_imgs/resnet-overfit.png)
 
 *Figure 2: Plot of 100 epochs of training ResNet-18 model on ADNI dataset without data augmentation.*
 
-### Implementing Data Augmentation
+### 5.2 Implementing Data Augmentation
 
 To address this issue data augmentation was introduced to the training set only. These augmentations are reapplied every epoch so each epoch the training set is different. This is to help the model generalise to unseen data and prevent overfitting to the training set. The augmentations that were applied each epoch to the training set are listed below:
 
@@ -130,14 +138,28 @@ To address this issue data augmentation was introduced to the training set only.
 
 As all brain scans appear to present in the same orientation, augmentations like flipping and mirroring were not used. 
 
-### Results of Data Augmentation
+### 5.3 Results of Data Augmentation
 ![resnet-augmentation](readme_imgs/resnet-aug.png)
-*Figure 2: Plot of 100 epochs of training ResNet-18 model on ADNI dataset with data augmentation.*
+*Figure 3: Plot of 100 epochs of training ResNet-18 model on ADNI dataset with data augmentation.*
 
 After implementing the data augmentation the, the ResNet-18 model no longer overfits to the training set. After stopping training af 100 epochs, the train accuracy only reached `79.65%`. From the trend in the data it appears if training continued, it would have likely reached a higher training accuracy, however training was stopped due to validation accuracy plateuing around `72%` accuracy after epoch 52. 
 
 This increase in validation accuracy in less epochs clearly indicates that the data augmentation is effectively improving the generalisation of the model.
 
+## 6. Adjusting Hyperparameters and Learning Schedule
+### 6.1 Learning Rate Schedule
+Now that the overfitting issue has been resolved, the next concern is the validation accuracy plateuing during training. A suspicion for this plateau is that the model has found a local minimum, but the learning rate is too high for it to converge within it, causing the model to oscillate around the minimum rather than refine its weights further.
+
+To address the validation plateau, a learning rate schedule will be implemented. The initial learning rate of `0.001` is effective early in training but becomes too high in later epochs. Cosine Annealing was selected because it maintains a high learning rate in early epochs for rapid progress, decreases steeply during mid-training to refine weights, and decreases gradually at the end to allow for fine convergence.
+
+This schedule will smoothly decrease the learning rate from `0.001` to `0.000001` at epoch 100.
+
+![Plot of Cosine Annealing Learning Schedule](readme_imgs/cosine%20learning.png)
+*Figure 4: Plot of learning rate vs epochs of Cosine Annealing schedule*
+
+### 6.2 Batch Size
+
+Another possible reason the model's validation accuracy is plateuing, is that the model is getting stuck in poor local minimas. To help the model possibly escape these minimas, the batch size will be reduced from `256` down to `64`. This will introduce more stochasticity into the gradient updates, which can help the optimizer navigate out of plateaus and find better solutions.
 
 ## References
 - 1. Liu, Z., Mao, H., Wu, C.-Y., Feichtenhofer, C., Darrell, T., Xie, S., Facebook, A., & Research. (2022). A ConvNet for the 2020s. https://arxiv.org/pdf/2201.03545
@@ -145,3 +167,4 @@ This increase in validation accuracy in less epochs clearly indicates that the d
 - 3. Liu, Z., Mao, H., Wu, C.-Y., Feichtenhofer, C., Darrell, T., Xie, S., Facebook, A., & Research. (2022). A ConvNet for the 2020s. https://arxiv.org/pdf/2201.03545
 - 4. Pytorch. (2024). ConvNeXt — Torchvision 0.28 documentation. Pytorch.Org. https://docs.pytorch.org/vision/0.28/models/convnext.html
 - 5. ADNI. (n.d.). The anatomy of an ADNI table. ADNI Documentation. Retrieved https://adni.loni.usc.edu/quick-start-guide-asset/anatomy2.html
+-6. He, K., Zhang, X., Ren, S., & Sun, J. (2015). Deep residual learning for image recognition. https://arxiv.org/pdf/1512.03385
