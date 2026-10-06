@@ -108,6 +108,36 @@ From the results of the investigations it was found that only `680` out of the `
 
 According to *(GeeksforGeeks, 2025) [4]*, ConvNeXt downsamples the input image by a total factor of 32, therefore, image dimensions divisible by 32 will produce whole numbers at each stage. This was the reasoning and justification for upscaling the images up to `256 x 256` pixels.
 
+### 5.3 Data Augmentation
+### The First Training Run
+During the first attempt at training the baseline ResNet-18 model on the ADNI dataset, after 23 epochs the model quickly overfit to the training set achieving `99%` training accuracy while plateuing at approximately `55%` validation accuracy.
+
+![ResNet Overfitting ](readme_imgs/resnet-overfit.png)
+
+*Figure 2: Plot of 100 epochs of training ResNet-18 model on ADNI dataset without data augmentation.*
+
+### Implementing Data Augmentation
+
+To address this issue data augmentation was introduced to the training set only. These augmentations are reapplied every epoch so each epoch the training set is different. This is to help the model generalise to unseen data and prevent overfitting to the training set. The augmentations that were applied each epoch to the training set are listed below:
+
+| Augmentation | Strength of effect |
+|---|---|
+| Random Rotation | Up to `10°` |
+| Random Translation | Up to `5%` |
+| Random Scaling | Up to `5%` |
+| Random Brightness Adjustment | Variation up to `0.15`|
+| Random Contrast Adjustment | Variation up to `0.15`|
+
+As all brain scans appear to present in the same orientation, augmentations like flipping and mirroring were not used. 
+
+### Results of Data Augmentation
+![resnet-augmentation](readme_imgs/resnet-aug.png)
+*Figure 2: Plot of 100 epochs of training ResNet-18 model on ADNI dataset with data augmentation.*
+
+After implementing the data augmentation the, the ResNet-18 model no longer overfits to the training set. After stopping training af 100 epochs, the train accuracy only reached `79.65%`. From the trend in the data it appears if training continued, it would have likely reached a higher training accuracy, however training was stopped due to validation accuracy plateuing around `72%` accuracy after epoch 52. 
+
+This increase in validation accuracy in less epochs clearly indicates that the data augmentation is effectively improving the generalisation of the model.
+
 
 ## References
 - 1. Liu, Z., Mao, H., Wu, C.-Y., Feichtenhofer, C., Darrell, T., Xie, S., Facebook, A., & Research. (2022). A ConvNet for the 2020s. https://arxiv.org/pdf/2201.03545
