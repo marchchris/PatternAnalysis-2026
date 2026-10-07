@@ -12,7 +12,12 @@ from PIL import Image
 import torch
 
 from config import DATASET_ROOT, LABEL_MAP, METADATA_PATH, SEED
-from dataset import create_splits, preprocess_image
+from dataset import (
+    calculate_image_statistics,
+    create_splits,
+    denormalize_image,
+    preprocess_image,
+)
 from modules import build_model
 
 def load_model(model_name, weights_path, device):
@@ -29,10 +34,10 @@ def load_model(model_name, weights_path, device):
 
     return model
 
-def predict_image(model, image_path, device):
+def predict_image(model, image_path, device, mean, std):
     """Returns the preprocessed image and probabilities"""
     with Image.open(image_path) as image:
-        image_tensor = preprocess_image(image) # preprocess the image
+        image_tensor = preprocess_image(image, mean=mean, std=std) # preprocess the image
 
     with torch.inference_mode(): # disable gradient calculations
         logits = model(image_tensor.unsqueeze(0).to(device))
@@ -63,17 +68,18 @@ def main():
     index_to_class = {index: name for name, index in LABEL_MAP.items()}
     print(f"Model: {args.model} - Device: {device}")
 
+    train_frame, _, test_frame = create_splits(
+        Path(args.dataset_root).expanduser(),
+        Path(args.metadata_path).expanduser(),
+        seed=SEED
+    )
+    mean, std = calculate_image_statistics(train_frame)
+
     if args.image:
         # use provided images if paths are provided
         imgs = [{"image_path": str(Path(args.image).expanduser()), "class_name": None}]
     else:
         # otherwise use images from test split
-        _, _, test_frame = create_splits(
-            Path(args.dataset_root).expanduser(),
-            Path(args.metadata_path).expanduser(),
-            seed=SEED
-        )
-
         # sample images from test split
         imgs = test_frame.sample(n=args.num_images, random_state=SEED).to_dict("records")
 
@@ -90,7 +96,9 @@ def main():
             true_class = img["class_name"]
 
             # run inference on images
-            image_tensor, probabilities = predict_image(model, image_path, device)
+            image_tensor, probabilities = predict_image(
+                model, image_path, device, mean, std
+            )
 
             # get model outputs
             predicted_index = probabilities.argmax().item()
@@ -111,7 +119,12 @@ def main():
             )
 
             axis = axes[index // columns, index % columns]
-            axis.imshow(image_tensor[0].numpy(), cmap="gray", vmin=0, vmax=1)
+            axis.imshow(
+                denormalize_image(image_tensor, mean, std)[0].numpy(),
+                cmap="gray",
+                vmin=0,
+                vmax=1,
+            )
             colour = "green" if predicted_class == true_class else "red"
 
             axis.set_title(

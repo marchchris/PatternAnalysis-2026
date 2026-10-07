@@ -10,9 +10,9 @@ from pathlib import Path
 import pandas as pd
 import torch
 import matplotlib.pyplot as plt
-from PIL import Image, ImageOps
+from PIL import Image
 from sklearn.model_selection import train_test_split
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 from torchvision.transforms import v2
 
 # import constants from config file
@@ -20,32 +20,26 @@ from config import CLASS_NAMES, DATASET_SPLIT_NAMES, DATASET_ROOT, METADATA_PATH
 
 PATIENT_PATTERN = re.compile(r"ADNI_(\d{3}_S_\d{4})", re.IGNORECASE)
 
-from torchvision.transforms import v2
+IMAGE_SIZE = (224, 224)
 
 TRAIN_AUGMENTATION = v2.Compose([
     v2.RandomResizedCrop(
-        size=(256, 256),
+        size=IMAGE_SIZE,
         scale=(0.8, 1.0),
         ratio=(0.95, 1.05),
     ),
     v2.RandomHorizontalFlip(p=0.5),
-    v2.RandomRotation(degrees=20),
     v2.RandomAffine(
-        degrees=0,
+        degrees=10,
         translate=(0.15, 0.15),
         scale=(0.9, 1.1),
-        shear=10,
     ),
-    v2.ColorJitter(
-        brightness=0.2,
-        contrast=0.2,
-    ),
-    v2.RandomApply([
-        v2.GaussianBlur(
-            kernel_size=3,
-            sigma=(0.1, 2.0),
-        )
-    ], p=0.3),
+])
+
+IMAGE_RESIZE = v2.Compose([
+    v2.Resize(IMAGE_SIZE),
+    v2.ToImage(),
+    v2.ToDtype(torch.float32, scale=True),
 ])
 
 
@@ -125,31 +119,62 @@ def create_splits(dataset_root, metadata_path, seed=SEED):
 
     return tuple(splits)
 
-def preprocess_image(image, augment=False):
-    """Returns an optionally augmented image as a (3, 256, 256) tensor"""
+def calculate_image_statistics(train_frame):
+    """Calculate grayscale mean and standard deviation from training images."""
+
+    pixel_sum = 0.0
+    pixel_squared_sum = 0.0
+    pixel_count = 0
+
+    for image_path in train_frame["image_path"]:
+        with Image.open(image_path) as image:
+            # apply the same resize used during preprocessing before measuring the distribution of pixel values
+            image_tensor = IMAGE_RESIZE(image.convert("L")).to(torch.float64)
+
+        pixels = image_tensor.reshape(-1)
+        pixel_sum += pixels.sum().item()
+        pixel_squared_sum += (pixels * pixels).sum().item()
+        pixel_count += pixels.numel()
+
+    # compute the variance from the accumulated pixels
+    mean = pixel_sum / pixel_count
+    variance = max(pixel_squared_sum / pixel_count - mean**2, 0.0)
+    std = variance**0.5
+    return mean, std
+
+
+def create_preprocessing(mean, std):
+    """Create preprocessing that resizes image and normalises"""
+
+    return v2.Compose([
+        IMAGE_RESIZE,
+        v2.Normalize(mean=(mean,) * 3, std=(std,) * 3),
+    ])
+
+
+def preprocess_image(image, augment=False, mean=None, std=None):
+    """Return an optionally augmented image as a normalized (3, 224, 224) tensor"""
 
     image = image.convert("L")
-    width, height = image.size
-
-    # pad image with black pixels to upscale it to 256 x 256
-    left = (256 - width) // 2
-    top = (256 - height) // 2
-    right = 256 - width - left
-    bottom = 256 - height - top
-    image = ImageOps.expand(image, border=(left, top, right, bottom), fill=0)
 
     if augment:
         image = TRAIN_AUGMENTATION(image)
 
     # copy grayscale values into each of the three RGB channels
     image = image.convert("RGB")
+    return create_preprocessing(mean, std)(image)
 
-    # convert PIL RGB pixels directly to a float tensor in [0, 1]
-    pixels = torch.tensor(list(image.getdata()), dtype=torch.float32)
-    image_tensor = pixels.view(256, 256, 3).permute(2, 0, 1) / 255.0
-    return image_tensor
 
-def load_batch(batch, augment=False):
+def denormalize_image(image, mean, std):
+    """Convert a normalized image tensor back to a displayable [0, 1] tensor"""
+
+    mean = torch.tensor(mean, dtype=image.dtype, device=image.device)
+    std = torch.tensor(std, dtype=image.dtype, device=image.device)
+    mean = mean.view(1, 1, 1)
+    std = std.view(1, 1, 1)
+    return (image * std + mean).clamp(0, 1)
+
+def load_batch(batch, augment=False, mean=None, std=None):
     """Load and preprocess a batch of (image_path, class_name) pairs"""
 
     images = []
@@ -157,7 +182,7 @@ def load_batch(batch, augment=False):
 
     for image_path, class_name in batch:
         with Image.open(image_path) as image:
-            images.append(preprocess_image(image, augment=augment))
+            images.append(preprocess_image(image, augment=augment, mean=mean, std=std))
         labels.append(LABEL_MAP[class_name])
 
     return torch.stack(images), torch.tensor(labels, dtype=torch.long)
@@ -170,6 +195,7 @@ def create_dataloaders(dataset_root, metadata_path, batch_size=32, num_workers=0
     metadata_path = Path(metadata_path).expanduser()
 
     splits = create_splits(dataset_root, metadata_path, seed)
+    mean, std = calculate_image_statistics(splits[0])
     loaders = []
 
     for split_index, frame in enumerate(splits):
@@ -180,7 +206,12 @@ def create_dataloaders(dataset_root, metadata_path, batch_size=32, num_workers=0
                 batch_size=batch_size,
                 shuffle=(split_index == 0),  # shuffle only the training split
                 num_workers=num_workers,
-                collate_fn=partial(load_batch, augment=(split_index == 0)),
+                collate_fn=partial(
+                    load_batch,
+                    augment=(split_index == 0),
+                    mean=mean,
+                    std=std,
+                ),
                 generator=torch.Generator().manual_seed(seed), # allow reproducibility
             )
 
@@ -188,7 +219,7 @@ def create_dataloaders(dataset_root, metadata_path, batch_size=32, num_workers=0
 
     return tuple(loaders)
 
-def show_examples(images, labels, count=6):
+def show_examples(images, labels, mean, std, count=6):
     """Display a few images and their class labels from a batch"""
 
     count = min(count, images.size(0))
@@ -202,7 +233,8 @@ def show_examples(images, labels, count=6):
     axes = axes.ravel()
 
     for index in range(count):
-        axes[index].imshow(images[index].permute(1, 2, 0).numpy())
+        display_image = denormalize_image(images[index], mean, std)
+        axes[index].imshow(display_image.permute(1, 2, 0).numpy())
 
         # use the label to retrieve and display the class name
         axes[index].set_title(CLASS_NAMES[labels[index].item()])
@@ -217,8 +249,14 @@ def show_examples(images, labels, count=6):
 
 if __name__ == "__main__":
     train_loader, val_loader, test_loader = create_dataloaders(DATASET_ROOT, METADATA_PATH)
+    train_frame, _, _ = create_splits(
+        Path(DATASET_ROOT).expanduser(),
+        Path(METADATA_PATH).expanduser(),
+        seed=SEED,
+    )
+    mean, std = calculate_image_statistics(train_frame)
     images, labels = next(iter(train_loader))
     print(f"\nImage batch shape: {images.shape}")
     print(f"Label batch shape: {labels.shape}")
     print(f"Pixel range: {images.min().item():.3f} to {images.max().item():.3f}")
-    show_examples(images, labels)
+    show_examples(images, labels, mean, std)
