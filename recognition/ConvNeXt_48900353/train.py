@@ -223,13 +223,15 @@ def evaluate_test(
     )
 
 def lr_scheduler(curr_epoch):
-    "Returns the learning rate for the current epoch"
+    """Return the learning rate multiplier for the current epoch"""
 
     if curr_epoch < WARMUP_EPOCHS:
-        return float(curr_epoch) / float(max(1, WARMUP_EPOCHS))
+        return float(curr_epoch + 1) / float(max(1, WARMUP_EPOCHS))
 
-    # cosine annealing phase
-    progress = float(curr_epoch - WARMUP_EPOCHS) / float(max(1, EPOCHS - WARMUP_EPOCHS))
+    # decay from the final warmup epoch to MIN_LEARNING_RATE in the final epoch
+    decay_start = max(0, WARMUP_EPOCHS - 1)
+    decay_steps = max(1, EPOCHS - 1 - decay_start)
+    progress = min(max(float(curr_epoch - decay_start) / decay_steps, 0.0), 1.0)
     cosine_decay = 0.5 * (1.0 + math.cos(math.pi * progress))
 
     # decay down to min learning rate 
@@ -243,7 +245,8 @@ def main():
         torch.cuda.manual_seed_all(SEED)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Model: {MODEL_NAME} training on: {torch.cuda.get_device_name(device)}")
+    device_name = torch.cuda.get_device_name(device) if device.type == "cuda" else "CPU"
+    print(f"Model: {MODEL_NAME} training on: {device_name}")
 
     # get train, validation, and test data loaders
     train_loader, val_loader, test_loader = create_dataloaders(
@@ -255,6 +258,7 @@ def main():
     )
 
     # create model and move to GPU
+    print(f"\nBuilding {MODEL_NAME} model...")
     model = build_model(MODEL_NAME, num_classes=len(LABEL_MAP)).to(device)
 
     criterion = nn.CrossEntropyLoss(label_smoothing=0.05)
@@ -299,7 +303,7 @@ def main():
         print(
             f"Epoch {epoch:02d}/{EPOCHS} | "
             f"Train loss: {train_loss:.4f}, accuracy: {train_accuracy:.2%} | "
-            f"Val loss: {val_loss:.4f}, accuracy: {val_accuracy:.2%}"
+            f"Val loss: {val_loss:.4f}, accuracy: {val_accuracy:.2%}",
         )
 
     print("\n--- Finished Training ---")

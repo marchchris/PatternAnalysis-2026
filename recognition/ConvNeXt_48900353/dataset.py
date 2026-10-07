@@ -10,7 +10,7 @@ from pathlib import Path
 import pandas as pd
 import torch
 import matplotlib.pyplot as plt
-from PIL import Image
+from PIL import Image, ImageStat
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
 from torchvision.transforms import v2
@@ -21,6 +21,7 @@ from config import CLASS_NAMES, DATASET_SPLIT_NAMES, DATASET_ROOT, METADATA_PATH
 PATIENT_PATTERN = re.compile(r"ADNI_(\d{3}_S_\d{4})", re.IGNORECASE)
 
 IMAGE_SIZE = (224, 224)
+RESIZE_IMAGE = v2.Resize(IMAGE_SIZE)
 
 TRAIN_AUGMENTATION = v2.Compose([
     v2.RandomResizedCrop(
@@ -37,7 +38,7 @@ TRAIN_AUGMENTATION = v2.Compose([
 ])
 
 IMAGE_RESIZE = v2.Compose([
-    v2.Resize(IMAGE_SIZE),
+    RESIZE_IMAGE,
     v2.ToImage(),
     v2.ToDtype(torch.float32, scale=True),
 ])
@@ -59,6 +60,8 @@ def build_image_table(dataset_root, scan_to_patient):
             folder = dataset_root / split / class_name # get path to specific split folder
 
             for path in sorted(folder.rglob("*")): # get path to all images in folder
+                if not path.is_file() or path.suffix.lower() not in {".jpg", ".jpeg"}:
+                    continue
                 scan_id = path.name.split("_", 1)[0] # get scan id from image file name
 
                 # append image_path, class_name, and patient_id as row to table
@@ -70,6 +73,7 @@ def build_image_table(dataset_root, scan_to_patient):
 
     # convert table to pandas dataframe and return
     table = pd.DataFrame(rows)
+
     return table
 
 def create_splits(dataset_root, metadata_path, seed=SEED):
@@ -99,7 +103,7 @@ def create_splits(dataset_root, metadata_path, seed=SEED):
     # split the remaining 30% into 20% validation and 10% testing
     val, test = train_test_split(
         remaining,
-        test_size=1 / 3, # 10% of 30%
+        test_size=1 / 3, # one third of the remaining 30% = 10% overall
         stratify=remaining["class_name"],
         random_state=seed,
     )
@@ -120,26 +124,28 @@ def create_splits(dataset_root, metadata_path, seed=SEED):
     return tuple(splits)
 
 def calculate_image_statistics(train_frame):
-    """Calculate grayscale mean and standard deviation from training images."""
+    """Calculate mean and standard deviation of training set images"""
 
     pixel_sum = 0.0
     pixel_squared_sum = 0.0
     pixel_count = 0
 
-    for image_path in train_frame["image_path"]:
+    for index, image_path in enumerate(train_frame["image_path"], start=1):
         with Image.open(image_path) as image:
-            # apply the same resize used during preprocessing before measuring the distribution of pixel values
-            image_tensor = IMAGE_RESIZE(image.convert("L")).to(torch.float64)
+            # resize images
+            image = RESIZE_IMAGE(image.convert("L"))
+            statistics = ImageStat.Stat(image)
 
-        pixels = image_tensor.reshape(-1)
-        pixel_sum += pixels.sum().item()
-        pixel_squared_sum += (pixels * pixels).sum().item()
-        pixel_count += pixels.numel()
+        pixel_sum += statistics.sum[0]
+        pixel_squared_sum += statistics.sum2[0]
+        pixel_count += statistics.count[0]
 
-    # compute the variance from the accumulated pixels
-    mean = pixel_sum / pixel_count
-    variance = max(pixel_squared_sum / pixel_count - mean**2, 0.0)
-    std = variance**0.5
+    # convert the mean/std from [0, 255] to [0, 1].
+    mean_255 = pixel_sum / pixel_count
+    variance_255 = max(pixel_squared_sum / pixel_count - mean_255**2, 0.0)
+    mean = mean_255 / 255.0
+    std = variance_255**0.5 / 255.0
+
     return mean, std
 
 
@@ -199,23 +205,23 @@ def create_dataloaders(dataset_root, metadata_path, batch_size=32, num_workers=0
     loaders = []
 
     for split_index, frame in enumerate(splits):
-            # store only image path and classes, load pixels when a batch is requested
-            samples = list(zip(frame["image_path"], frame["class_name"]))
-            loader = DataLoader(
-                samples,
-                batch_size=batch_size,
-                shuffle=(split_index == 0),  # shuffle only the training split
-                num_workers=num_workers,
-                collate_fn=partial(
-                    load_batch,
-                    augment=(split_index == 0),
-                    mean=mean,
-                    std=std,
-                ),
-                generator=torch.Generator().manual_seed(seed), # allow reproducibility
-            )
+        # Store only paths and classes; load pixels when a batch is requested.
+        samples = list(zip(frame["image_path"], frame["class_name"]))
+        loader = DataLoader(
+            samples,
+            batch_size=batch_size,
+            shuffle=(split_index == 0),  # shuffle only the training split
+            num_workers=num_workers,
+            collate_fn=partial(
+                load_batch,
+                augment=(split_index == 0),
+                mean=mean,
+                std=std,
+            ),
+            generator=torch.Generator().manual_seed(seed), # allow reproducibility
+        )
 
-            loaders.append(loader)
+        loaders.append(loader)
 
     return tuple(loaders)
 
@@ -249,12 +255,9 @@ def show_examples(images, labels, mean, std, count=6):
 
 if __name__ == "__main__":
     train_loader, val_loader, test_loader = create_dataloaders(DATASET_ROOT, METADATA_PATH)
-    train_frame, _, _ = create_splits(
-        Path(DATASET_ROOT).expanduser(),
-        Path(METADATA_PATH).expanduser(),
-        seed=SEED,
-    )
-    mean, std = calculate_image_statistics(train_frame)
+    # Reuse the statistics already calculated when creating the loaders.
+    mean = train_loader.collate_fn.keywords["mean"]
+    std = train_loader.collate_fn.keywords["std"]
     images, labels = next(iter(train_loader))
     print(f"\nImage batch shape: {images.shape}")
     print(f"Label batch shape: {labels.shape}")
