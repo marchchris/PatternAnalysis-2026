@@ -10,9 +10,9 @@ from pathlib import Path
 import pandas as pd
 import torch
 import matplotlib.pyplot as plt
-from PIL import Image, ImageOps
+from PIL import Image
 from sklearn.model_selection import train_test_split
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 from torchvision.transforms import v2
 
 # import constants from config file
@@ -20,32 +20,28 @@ from config import CLASS_NAMES, DATASET_SPLIT_NAMES, DATASET_ROOT, METADATA_PATH
 
 PATIENT_PATTERN = re.compile(r"ADNI_(\d{3}_S_\d{4})", re.IGNORECASE)
 
-from torchvision.transforms import v2
-
-TRAIN_AUGMENTATION = v2.Compose([
+TRAIN_TRANSFORM = v2.Compose([
+    v2.Grayscale(num_output_channels=3),
     v2.RandomResizedCrop(
-        size=(256, 256),
+        size=(224, 224),
         scale=(0.8, 1.0),
         ratio=(0.95, 1.05),
     ),
     v2.RandomHorizontalFlip(p=0.5),
-    v2.RandomRotation(degrees=20),
     v2.RandomAffine(
-        degrees=0,
+        degrees=10,
         translate=(0.15, 0.15),
         scale=(0.9, 1.1),
-        shear=10,
     ),
-    v2.ColorJitter(
-        brightness=0.2,
-        contrast=0.2,
-    ),
-    v2.RandomApply([
-        v2.GaussianBlur(
-            kernel_size=3,
-            sigma=(0.1, 2.0),
-        )
-    ], p=0.3),
+    v2.ToImage(),
+    v2.ToDtype(torch.float32, scale=True),
+])
+
+EVAL_TRANSFORM = v2.Compose([
+    v2.Grayscale(num_output_channels=3),
+    v2.Resize(size=(224, 224)),
+    v2.ToImage(),
+    v2.ToDtype(torch.float32, scale=True),
 ])
 
 
@@ -126,28 +122,10 @@ def create_splits(dataset_root, metadata_path, seed=SEED):
     return tuple(splits)
 
 def preprocess_image(image, augment=False):
-    """Returns an optionally augmented image as a (3, 256, 256) tensor"""
+    """Return an optionally augmented image as a (3, 224, 224) tensor."""
 
-    image = image.convert("L")
-    width, height = image.size
-
-    # pad image with black pixels to upscale it to 256 x 256
-    left = (256 - width) // 2
-    top = (256 - height) // 2
-    right = 256 - width - left
-    bottom = 256 - height - top
-    image = ImageOps.expand(image, border=(left, top, right, bottom), fill=0)
-
-    if augment:
-        image = TRAIN_AUGMENTATION(image)
-
-    # copy grayscale values into each of the three RGB channels
-    image = image.convert("RGB")
-
-    # convert PIL RGB pixels directly to a float tensor in [0, 1]
-    pixels = torch.tensor(list(image.getdata()), dtype=torch.float32)
-    image_tensor = pixels.view(256, 256, 3).permute(2, 0, 1) / 255.0
-    return image_tensor
+    transform = TRAIN_TRANSFORM if augment else EVAL_TRANSFORM
+    return transform(image)
 
 def load_batch(batch, augment=False):
     """Load and preprocess a batch of (image_path, class_name) pairs"""

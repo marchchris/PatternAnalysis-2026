@@ -4,7 +4,8 @@ import torch
 from torch import nn
 import matplotlib.pyplot as plt
 from sklearn.metrics import accuracy_score, confusion_matrix, precision_recall_fscore_support, roc_auc_score
-from torch.optim.lr_scheduler import OneCycleLR
+from torch.optim.lr_scheduler import LambdaLR
+import math
 
 from config import LABEL_MAP, SEED, DATASET_ROOT, METADATA_PATH
 from dataset import create_dataloaders
@@ -14,10 +15,12 @@ MODEL_NAME = "convnext"
 BATCH_SIZE = 64
 EPOCHS = 50
 LEARNING_RATE = 1e-4
-WEIGHT_DECAY = 1e-4
+MIN_LEARNING_RATE = 1e-6
+WEIGHT_DECAY = 0.05
+WARMUP_EPOCHS = 5
 NUM_WORKERS = 4
 
-def run_epoch(model, loader, criterion, device, optimizer=None, epoch=None, scheduler=None):
+def run_epoch(model, loader, criterion, device, optimizer=None, epoch=None):
     """Train when an optimizer is provided, otherwise evaluate the model"""
 
     training = optimizer is not None
@@ -45,9 +48,6 @@ def run_epoch(model, loader, criterion, device, optimizer=None, epoch=None, sche
             if training:
                 loss.backward()
                 optimizer.step()
-
-                if scheduler is not None:
-                    scheduler.step()
 
             # weight by batch size so final batch is counted correctly
             total_loss += loss.item() * labels.size(0)
@@ -222,6 +222,23 @@ def evaluate_test(
         run_dir,
     )
 
+def lr_scheduler(curr_epoch):
+    """Return the learning rate multiplier for the current epoch"""
+
+    # start by linearly increasing during warmup
+    if curr_epoch < WARMUP_EPOCHS:
+        return float(curr_epoch + 1) / float(max(1, WARMUP_EPOCHS))
+
+    # after warmup decay using cosine annealing
+    decay_start = max(0, WARMUP_EPOCHS - 1)
+    decay_steps = max(1, EPOCHS - 1 - decay_start)
+    progress = min(max(float(curr_epoch - decay_start) / decay_steps, 0.0), 1.0)
+    cosine_decay = 0.5 * (1.0 + math.cos(math.pi * progress))
+
+    # decay down to min learning rate 
+    lr_ratio = MIN_LEARNING_RATE / LEARNING_RATE
+    return lr_ratio + (1.0 - lr_ratio) * cosine_decay
+
 def main():
     # allow reproducibility
     torch.manual_seed(SEED)
@@ -251,14 +268,8 @@ def main():
         weight_decay=WEIGHT_DECAY,
     )
 
-    scheduler = OneCycleLR(
-        optimizer,
-        max_lr=5 * LEARNING_RATE,
-        div_factor=10.0,
-        final_div_factor=10.0,
-        steps_per_epoch=len(train_loader),
-        epochs=EPOCHS,
-    )
+    # create learning rate scheduler
+    scheduler = LambdaLR(optimizer, lr_lambda=lr_scheduler)
 
     history = []
 
@@ -268,13 +279,16 @@ def main():
     for epoch in range(1, EPOCHS + 1):
         # run training epoch
         train_loss, train_accuracy = run_epoch(
-            model, train_loader, criterion, device, optimizer, epoch=epoch, scheduler=scheduler
+            model, train_loader, criterion, device, optimizer, epoch=epoch
         )
 
         # run validation
         val_loss, val_accuracy = run_epoch(
             model, val_loader, criterion, device
         )
+
+        # step scheduler at end of each epoch
+        scheduler.step()
 
         # add current epoch results to history
         history.append({
