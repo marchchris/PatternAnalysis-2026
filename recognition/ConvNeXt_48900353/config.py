@@ -1,8 +1,8 @@
 """Config file for storing paths, defining constants and hyperparameters."""
 
 # paths for ADNI dataset
-DATASET_ROOT = "~/Documents/Datasets/ADNI/AD_NC"
-METADATA_PATH = "~/Documents/Datasets/ADNI/meta_data_with_label.json"
+DATASET_ROOT = "/workspace/ADNI/AD_NC"
+METADATA_PATH = "/workspace/ADNI/meta_data_with_label.json"
 
 # constants for files
 SEED = 42
