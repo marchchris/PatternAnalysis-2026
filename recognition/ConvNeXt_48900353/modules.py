@@ -1,10 +1,10 @@
 """
-This file provides a single function for creating randomly initialized ResNet-18 or ConvNeXt-Base models and 
+This file provides a single function for creating randomly initialized ResNet or ConvNeXt models and 
 replacing their final classification layers with the specified number of output classes.
 """
 
 import torch.nn as nn
-from torchvision.models import convnext_base, resnet18
+from torchvision.models import convnext_tiny, resnet18
 
 def build_model(model_name, num_classes):
     """Build a classification model with a output layer with `num_classes` outputs.
@@ -30,7 +30,7 @@ def build_model(model_name, num_classes):
         )
 
     elif model_name == "convnext":
-        model = convnext_base(weights=None) # create non pretrained convnext model
+        model = convnext_tiny(weights=None) # create non pretrained convnext model
 
         # replace only the final linear layer
         model.classifier[-1] = nn.Linear(
