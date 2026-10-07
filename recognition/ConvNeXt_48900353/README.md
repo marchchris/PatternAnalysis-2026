@@ -111,18 +111,18 @@ According to *(GeeksforGeeks, 2025) [4]*, ConvNeXt downsamples the input image b
 ## 5. Data Augmentation
 ### 5.1 The First Training Run
 
-The first attempt at training on the ADNI dataset was using the baseline ResNet-18 model with the following hyperparameters:
+The first attempt at training on the ADNI dataset was using the ConVNeXt model with the following hyperparameters:
 
 | Hyperparameter | Value |
 |---|---|
 | Learning rate | 0.0001 |
 | Batch size | 256 |
 
-The ResNet-18 model was trained for 100 epochs using a Nvidia A100 GPU. However, after 23 epochs the model quickly overfit to the training set achieving `99%` training accuracy while plateuing at approximately `55%` validation accuracy.
+The ConVNeXt model was trained for 100 epochs using a Nvidia A100 GPU. However, after 23 epochs the model quickly overfit to the training set achieving `99%` training accuracy while plateuing at approximately `55%` validation accuracy.
 
-![ResNet Overfitting ](readme_imgs/resnet-overfit.png)
+![ConvNeXt Overfitting ](readme_imgs/convnext-overfit.png)
 
-*Figure 2: Plot of 100 epochs of training ResNet-18 model on ADNI dataset without data augmentation.*
+*Figure 2: Plot of 100 epochs of training ConVNeXt model on ADNI dataset without data augmentation.*
 
 ### 5.2 Implementing Data Augmentation
 
@@ -139,10 +139,10 @@ To address this issue data augmentation was introduced to the training set only.
 As all brain scans appear to present in the same orientation, augmentations like flipping and mirroring were not used. 
 
 ### 5.3 Results of Data Augmentation
-![resnet-augmentation](readme_imgs/resnet-aug.png)
-*Figure 3: Plot of 100 epochs of training ResNet-18 model on ADNI dataset with data augmentation.*
+![ConvNeXt After Data Augmentation](readme_imgs/convnext-aug.png)
+*Figure 3: Plot of 100 epochs of training ConvNeXt model on ADNI dataset with data augmentation.*
 
-After implementing the data augmentation the, the ResNet-18 model no longer overfits to the training set. After stopping training af 100 epochs, the train accuracy only reached `79.65%`. From the trend in the data it appears if training continued, it would have likely reached a higher training accuracy, however training was stopped due to validation accuracy plateuing around `72%` accuracy after epoch 52. 
+After implementing the data augmentation the, the ConVNeXt model no longer overfits to the training set. After stopping training af 100 epochs, the train accuracy only reached `79.65%`. From the trend in the data it appears if training continued, it would have likely reached a higher training accuracy, however training was stopped due to validation accuracy plateuing around `72%` accuracy after epoch 52. 
 
 This increase in validation accuracy in less epochs clearly indicates that the data augmentation is effectively improving the generalisation of the model.
 

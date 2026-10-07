@@ -4,7 +4,7 @@ import torch
 from torch import nn
 import matplotlib.pyplot as plt
 from sklearn.metrics import accuracy_score, confusion_matrix, precision_recall_fscore_support, roc_auc_score
-from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.optim.lr_scheduler import OneCycleLR
 
 from config import LABEL_MAP, SEED, DATASET_ROOT, METADATA_PATH
 from dataset import create_dataloaders
@@ -12,12 +12,12 @@ from modules import build_model
 
 MODEL_NAME = "convnext"
 BATCH_SIZE = 64
-EPOCHS = 100
+EPOCHS = 50
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 1e-4
 NUM_WORKERS = 4
 
-def run_epoch(model, loader, criterion, device, optimizer=None, epoch=None):
+def run_epoch(model, loader, criterion, device, optimizer=None, epoch=None, scheduler=None):
     """Train when an optimizer is provided, otherwise evaluate the model"""
 
     training = optimizer is not None
@@ -45,6 +45,9 @@ def run_epoch(model, loader, criterion, device, optimizer=None, epoch=None):
             if training:
                 loss.backward()
                 optimizer.step()
+
+                if scheduler is not None:
+                    scheduler.step()
 
             # weight by batch size so final batch is counted correctly
             total_loss += loss.item() * labels.size(0)
@@ -248,10 +251,13 @@ def main():
         weight_decay=WEIGHT_DECAY,
     )
 
-    scheduler = CosineAnnealingLR(
+    scheduler = OneCycleLR(
         optimizer,
-        T_max=EPOCHS - 1,
-        eta_min=1e-6,
+        max_lr=5 * LEARNING_RATE,
+        div_factor=10.0,
+        final_div_factor=10.0,
+        steps_per_epoch=len(train_loader),
+        epochs=EPOCHS,
     )
 
     history = []
@@ -262,17 +268,13 @@ def main():
     for epoch in range(1, EPOCHS + 1):
         # run training epoch
         train_loss, train_accuracy = run_epoch(
-            model, train_loader, criterion, device, optimizer, epoch=epoch
+            model, train_loader, criterion, device, optimizer, epoch=epoch, scheduler=scheduler
         )
 
         # run validation
         val_loss, val_accuracy = run_epoch(
             model, val_loader, criterion, device
         )
-
-        # Set the learning rate for the next epoch.
-        if epoch < EPOCHS:
-            scheduler.step()
 
         # add current epoch results to history
         history.append({

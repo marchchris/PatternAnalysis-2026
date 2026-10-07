@@ -13,23 +13,39 @@ import matplotlib.pyplot as plt
 from PIL import Image, ImageOps
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
-from torchvision.transforms import v2, InterpolationMode
+from torchvision.transforms import v2
 
 # import constants from config file
 from config import CLASS_NAMES, DATASET_SPLIT_NAMES, DATASET_ROOT, METADATA_PATH, SEED, LABEL_MAP
 
 PATIENT_PATTERN = re.compile(r"ADNI_(\d{3}_S_\d{4})", re.IGNORECASE)
 
+from torchvision.transforms import v2
+
 TRAIN_AUGMENTATION = v2.Compose([
-    v2.RandomHorizontalFlip(p=0.5),
-    v2.RandomAffine(
-        degrees=15,
-        translate=(0.1, 0.1),
-        scale=(0.8, 1.2),
-        shear=(-5.0, 5.0),
-        interpolation=InterpolationMode.BILINEAR,
-        fill=0,
+    v2.RandomResizedCrop(
+        size=(256, 256),
+        scale=(0.8, 1.0),
+        ratio=(0.95, 1.05),
     ),
+    v2.RandomHorizontalFlip(p=0.5),
+    v2.RandomRotation(degrees=20),
+    v2.RandomAffine(
+        degrees=0,
+        translate=(0.15, 0.15),
+        scale=(0.9, 1.1),
+        shear=10,
+    ),
+    v2.ColorJitter(
+        brightness=0.2,
+        contrast=0.2,
+    ),
+    v2.RandomApply([
+        v2.GaussianBlur(
+            kernel_size=3,
+            sigma=(0.1, 2.0),
+        )
+    ], p=0.3),
 ])
 
 
