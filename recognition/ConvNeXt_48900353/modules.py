@@ -174,13 +174,15 @@ class ConvNeXtBlock(nn.Module):
 class ConvNeXt(nn.Module):
     """ConvNeXt with depths [3, 3, 9, 3] and widths [96, 192, 384, 768].
     drop_path_rate is the maximum stochastic-depth probability, it increases linearly across the 18 blocks.
+    dropout_rate is applied to pooled features before the classification head.
     """
 
-    def __init__(self, num_classes=2, drop_path_rate=0.1):
+    def __init__(self, num_classes=2, drop_path_rate=0.1, dropout_rate=0.2):
         super().__init__()
 
-        depths = (3, 3, 27, 3)
+        depths = (3, 3, 9, 3)
         widths = (96, 192, 384, 768)
+        # widths = (48, 96, 192, 384)
 
         # the stem reduces spatial size by four 224x224 -> 56x56.
         self.stem = nn.Sequential(
@@ -217,6 +219,7 @@ class ConvNeXt(nn.Module):
                 ))
 
         self.norm = nn.LayerNorm(widths[-1], eps=1e-6)
+        self.dropout = nn.Dropout(p=dropout_rate)
         self.head = nn.Linear(widths[-1], num_classes)
         self.apply(self._init_weights)
 
@@ -236,9 +239,12 @@ class ConvNeXt(nn.Module):
 
         x = x.mean(dim=(2, 3))  # global average pooling: (N, C, H, W) -> (N, C)
         x = self.norm(x)
+        x = self.dropout(x)
         return self.head(x)
 
-def build_model(model_name, num_classes=2, *, drop_path_rate=0.4):
+def build_model(
+    model_name, num_classes=2, *, drop_path_rate=0.1, dropout_rate=0.3,
+):
     """Build a randomly initialized ResNet or ConvNeXt model"""
 
     if model_name == "resnet18":
@@ -248,6 +254,7 @@ def build_model(model_name, num_classes=2, *, drop_path_rate=0.4):
         return ConvNeXt(
             num_classes=num_classes,
             drop_path_rate=drop_path_rate,
+            dropout_rate=dropout_rate,
         )
 
     raise ValueError("model_name must be 'resnet18' or'convnext'.")

@@ -15,7 +15,7 @@ BATCH_SIZE = 64
 EPOCHS = 50
 EARLY_STOPPING_PATIENCE = 1000
 LEARNING_RATE = 1e-4
-WEIGHT_DECAY = 0.05
+WEIGHT_DECAY = 1e-4
 NUM_WORKERS = 4
 
 def run_epoch(
@@ -279,7 +279,7 @@ def main():
     use_amp = device.type == "cuda"
     scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
 
-    criterion = nn.CrossEntropyLoss(label_smoothing=0.1).to(device)
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.05).to(device)
 
     optimizer = torch.optim.AdamW(
         model.parameters(),
