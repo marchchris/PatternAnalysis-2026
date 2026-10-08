@@ -34,7 +34,7 @@ from config import (
 PATIENT_PATTERN = re.compile(r"ADNI_(\d{3}_S_\d{4})", re.IGNORECASE)
 IMAGE_SIZE = (224, 224)
 
-def normalise_intensity(image):
+def normalise_images(image):
     """Normalise images to mean 0 and standard deviation 1"""
     values = TF.pil_to_tensor(image.convert("L")).to(torch.float32)
     mean = values.mean()
@@ -47,18 +47,20 @@ def normalise_intensity(image):
 
 
 TRAIN_TRANSFORM = v2.Compose([
-    v2.Lambda(normalise_intensity),
+    v2.Lambda(normalise_images),
     v2.Resize(IMAGE_SIZE),
     v2.RandomResizedCrop(size=IMAGE_SIZE, scale=(0.9, 1.0)),
     v2.RandomHorizontalFlip(p=0.5),
-    v2.RandomRotation(degrees=10),
+    v2.RandomVerticalFlip(p=0.2),
+    # v2.RandomRotation(degrees=10),
+    v2.RandomAffine(degrees=10, translate=(0.05, 0.05), scale=(0.9, 1.1)),
     v2.ToImage(),
     v2.ToDtype(torch.float32, scale=True),
     v2.Normalize(mean=[0.5], std=[0.5]),
 ])
 
 EVAL_TRANSFORM = v2.Compose([
-    v2.Lambda(normalise_intensity),
+    v2.Lambda(normalise_images),
     v2.Resize(IMAGE_SIZE),
     v2.ToImage(),
     v2.ToDtype(torch.float32, scale=True),
