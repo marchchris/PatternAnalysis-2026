@@ -163,8 +163,60 @@ Another possible reason the model's validation accuracy is plateuing, is that th
 
 ## References
 - 1. Liu, Z., Mao, H., Wu, C.-Y., Feichtenhofer, C., Darrell, T., Xie, S., Facebook, A., & Research. (2022). A ConvNet for the 2020s. https://arxiv.org/pdf/2201.03545
-- 2. COMP3710 Teaching Team. (2026, August 26). Lab Demonstration 2 Pattern Recognition [PDF]. https://learn.uq.edu.au/ultra/courses/_206498_1/document/_14338370_1?view=content&state=view
-- 3. Liu, Z., Mao, H., Wu, C.-Y., Feichtenhofer, C., Darrell, T., Xie, S., Facebook, A., & Research. (2022). A ConvNet for the 2020s. https://arxiv.org/pdf/2201.03545
-- 4. Pytorch. (2024). ConvNeXt — Torchvision 0.28 documentation. Pytorch.Org. https://docs.pytorch.org/vision/0.28/models/convnext.html
-- 5. ADNI. (n.d.). The anatomy of an ADNI table. ADNI Documentation. Retrieved https://adni.loni.usc.edu/quick-start-guide-asset/anatomy2.html
+- 2. He, K., Zhang, X., Ren, S., & Sun, J. (2015, December 10). Deep residual learning for image recognition. arXiv. arXiv.Org. https://arxiv.org/abs/1512.03385
+- 3. COMP3710 Teaching Team. (2026, August 26). Lab Demonstration 2 Pattern Recognition [PDF]. https://learn.uq.edu.au/ultra/courses/_206498_1/document/_14338370_1?view=content&state=view
+- 4. Liu, Z., Mao, H., Wu, C.-Y., Feichtenhofer, C., Darrell, T., Xie, S., Facebook, A., & Research. (2022). A ConvNet for the 2020s. https://arxiv.org/pdf/2201.03545
+- 5. Pytorch. (2024). ConvNeXt — Torchvision 0.28 documentation. Pytorch.Org. https://docs.pytorch.org/vision/0.28/models/convnext.html
+- 6. ADNI. (n.d.). The anatomy of an ADNI table. ADNI Documentation. Retrieved https://adni.loni.usc.edu/quick-start-guide-asset/anatomy2.html
 -6. He, K., Zhang, X., Ren, S., & Sun, J. (2015). Deep residual learning for image recognition. https://arxiv.org/pdf/1512.03385
+
+### Google AI Overview (Sep 26 9:56pm)
+
+Prompt: "in python how to recruively get paths of all sub dir of a path"
+
+```
+Method 1: Using pathlib (Recommended for Python 3.4+)The pathlib module provides an object-oriented approach. You can use .rglob("*") to search recursively and filter for directories using .is_dir().pythonfrom pathlib import Path
+
+# Define your starting directory
+base_path = Path("/path/to/your/directory")
+
+# Get paths of all subdirectories recursively
+subdirectories = [str(p) for p in base_path.rglob("*") if p.is_dir()]
+
+print(subdirectories)
+```
+
+
+### ChatGPT 5.6 Sol (Sep 26 10:51pm)
+
+Prompt: "Give python regex for matching the patient id from this string."
+
+"ADNI_T1_3T/ADNI_016_S_6381_MR_Accelerated_Sagittal_MPRAGE__br_raw_20180522132015417_85_S688087_I1000691.nii"
+
+The patient id is 016_S_6381"
+
+```
+You can use this regex:
+
+r"ADNI_(\d{3}_S_\d{4})"
+```
+
+### ChatGPT 5.6 Sol (Sep 29 3:00pm)
+
+Prompt: "write function documentation for this function"
+
+```
+"""Build a classification model with a custom output layer.
+
+Args:
+    model_name: Model architecture to create: ``"resnet18"`` or
+        ``"convnext"``.
+    num_classes: Number of output classes.
+
+Returns:
+    A randomly initialized model configured for ``num_classes`` outputs.
+
+Raises:
+    ValueError: If ``model_name`` is not supported.
+    """
+```

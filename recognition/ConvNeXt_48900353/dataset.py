@@ -21,27 +21,30 @@ from config import CLASS_NAMES, DATASET_SPLIT_NAMES, DATASET_ROOT, METADATA_PATH
 PATIENT_PATTERN = re.compile(r"ADNI_(\d{3}_S_\d{4})", re.IGNORECASE)
 
 TRAIN_TRANSFORM = v2.Compose([
-    v2.Grayscale(num_output_channels=3),
+    v2.Grayscale(num_output_channels=1),
     v2.RandomResizedCrop(
         size=(224, 224),
         scale=(0.8, 1.0),
-        ratio=(0.95, 1.05),
+        ratio=(0.9, 1.1),
     ),
     v2.RandomHorizontalFlip(p=0.5),
+    v2.RandomRotation(10),
     v2.RandomAffine(
-        degrees=10,
-        translate=(0.15, 0.15),
-        scale=(0.9, 1.1),
+        degrees=0,
+        translate=(0.05, 0.05),
     ),
     v2.ToImage(),
     v2.ToDtype(torch.float32, scale=True),
+    v2.Normalize(mean=[0.1160], std=[0.2228]), # calculated from training set
+    v2.RandomErasing(p=0.25)
 ])
 
 EVAL_TRANSFORM = v2.Compose([
-    v2.Grayscale(num_output_channels=3),
+    v2.Grayscale(num_output_channels=1),
     v2.Resize(size=(224, 224)),
     v2.ToImage(),
     v2.ToDtype(torch.float32, scale=True),
+    v2.Normalize(mean=[0.1160], std=[0.2228]) # calculated from training set
 ])
 
 
@@ -122,7 +125,7 @@ def create_splits(dataset_root, metadata_path, seed=SEED):
     return tuple(splits)
 
 def preprocess_image(image, augment=False):
-    """Return an optionally augmented image as a (3, 224, 224) tensor."""
+    """Return an optionally augmented image as a (1, 224, 224) tensor"""
 
     transform = TRAIN_TRANSFORM if augment else EVAL_TRANSFORM
     return transform(image)
@@ -180,7 +183,7 @@ def show_examples(images, labels, count=6):
     axes = axes.ravel()
 
     for index in range(count):
-        axes[index].imshow(images[index].permute(1, 2, 0).numpy())
+        axes[index].imshow(images[index, 0].numpy(), cmap="gray")
 
         # use the label to retrieve and display the class name
         axes[index].set_title(CLASS_NAMES[labels[index].item()])
