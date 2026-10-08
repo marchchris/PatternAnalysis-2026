@@ -179,7 +179,7 @@ class ConvNeXt(nn.Module):
     def __init__(self, num_classes=2, drop_path_rate=0.1):
         super().__init__()
 
-        depths = (3, 3, 9, 3)
+        depths = (3, 3, 27, 3)
         widths = (96, 192, 384, 768)
 
         # the stem reduces spatial size by four 224x224 -> 56x56.
@@ -238,7 +238,7 @@ class ConvNeXt(nn.Module):
         x = self.norm(x)
         return self.head(x)
 
-def build_model(model_name, num_classes=2, *, drop_path_rate=0.1):
+def build_model(model_name, num_classes=2, *, drop_path_rate=0.4):
     """Build a randomly initialized ResNet or ConvNeXt model"""
 
     if model_name == "resnet18":

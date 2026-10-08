@@ -20,28 +20,37 @@ from config import CLASS_NAMES, DATASET_SPLIT_NAMES, DATASET_ROOT, METADATA_PATH
 
 PATIENT_PATTERN = re.compile(r"ADNI_(\d{3}_S_\d{4})", re.IGNORECASE)
 
+IMAGE_SIZE = (224, 224)
+
 TRAIN_TRANSFORM = v2.Compose([
     v2.Grayscale(num_output_channels=1),
-    v2.RandomResizedCrop(
-        size=(224, 224),
-        scale=(0.8, 1.0),
-        ratio=(0.9, 1.1),
-    ),
+    v2.Resize(256),
+    v2.RandomCrop(IMAGE_SIZE),
+    # v2.RandomResizedCrop(
+    #     size=(224, 224),
+    #     scale=(0.8, 1.0),
+    #     ratio=(0.9, 1.1),
+    # ),
     v2.RandomHorizontalFlip(p=0.5),
-    v2.RandomRotation(10),
+    v2.RandomRotation(15),
     v2.RandomAffine(
         degrees=0,
         translate=(0.05, 0.05),
+        scale=(0.95, 1.05),
+        shear=5
     ),
+    v2.GaussianBlur(kernel_size=(3, 3), sigma=(0.1, 1.0)),
+    v2.ColorJitter(brightness=0.1, contrast=0.1),
     v2.ToImage(),
     v2.ToDtype(torch.float32, scale=True),
     v2.Normalize(mean=[0.1160], std=[0.2228]), # calculated from training set
-    v2.RandomErasing(p=0.25)
+    # v2.RandomErasing(p=0.25)
 ])
 
 EVAL_TRANSFORM = v2.Compose([
     v2.Grayscale(num_output_channels=1),
-    v2.Resize(size=(224, 224)),
+    v2.Resize(256),
+    v2.CenterCrop(IMAGE_SIZE),
     v2.ToImage(),
     v2.ToDtype(torch.float32, scale=True),
     v2.Normalize(mean=[0.1160], std=[0.2228]) # calculated from training set

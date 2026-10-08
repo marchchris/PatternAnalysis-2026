@@ -13,13 +13,25 @@ from modules import build_model
 MODEL_NAME = "convnext"
 BATCH_SIZE = 64
 EPOCHS = 50
+EARLY_STOPPING_PATIENCE = 1000
 LEARNING_RATE = 1e-4
+WEIGHT_DECAY = 0.05
 NUM_WORKERS = 4
 
-def run_epoch(model, loader, criterion, device, optimizer=None, epoch=None, scheduler=None):
+def run_epoch(
+    model,
+    loader,
+    criterion,
+    device,
+    optimizer=None,
+    epoch=None,
+    scheduler=None,
+    scaler=None,
+):
     """Train when an optimizer is provided, otherwise evaluate the model"""
 
     training = optimizer is not None
+    amp_enabled = scaler is not None and scaler.is_enabled()
     model.train(training)
 
     total_loss = 0.0
@@ -37,16 +49,31 @@ def run_epoch(model, loader, criterion, device, optimizer=None, epoch=None, sche
             if training:
                 optimizer.zero_grad(set_to_none=True)
 
-                if scheduler is not None:
-                    scheduler.step()
-
-            outputs = model(images) # forward pass
-            loss = criterion(outputs, labels) # calculate loss
+            with torch.autocast(
+                device_type=device.type,
+                dtype=torch.float16,
+                enabled=amp_enabled,
+            ):
+                outputs = model(images) # forward pass
+                loss = criterion(outputs, labels) # calculate loss
 
             # update weights if training model
             if training:
-                loss.backward()
-                optimizer.step()
+                if scaler is not None:
+                    scale_before_step = scaler.get_scale()
+                    scaler.scale(loss).backward()
+                    scaler.step(optimizer)
+                    scaler.update()
+                    optimizer_step_completed = (
+                        scaler.get_scale() >= scale_before_step
+                    )
+                else:
+                    loss.backward()
+                    optimizer.step()
+                    optimizer_step_completed = True
+
+                if scheduler is not None and optimizer_step_completed:
+                    scheduler.step()
 
             # weight by batch size so final batch is counted correctly
             total_loss += loss.item() * labels.size(0)
@@ -187,6 +214,7 @@ def evaluate_test(
     device,
     training_seconds,
     run_dir,
+    scaler=None,
 ):
     """Evaluates the test set once after training without updating the model"""
     model.eval()
@@ -199,8 +227,14 @@ def evaluate_test(
         for images, labels in test_loader:
             images = images.to(device)
             labels = labels.to(device)
-            outputs = model(images) # forward pass
-            loss = criterion(outputs, labels) # calculatee loss
+            amp_enabled = scaler is not None and scaler.is_enabled()
+            with torch.autocast(
+                device_type=device.type,
+                dtype=torch.float16,
+                enabled=amp_enabled,
+            ):
+                outputs = model(images) # forward pass
+                loss = criterion(outputs, labels) # calculatee loss
 
             # softmax probabilities are used for AUC and confidence statistics
             probabilities = torch.softmax(outputs, dim=1)
@@ -242,12 +276,15 @@ def main():
 
     # create model and move to GPU
     model = build_model(MODEL_NAME, num_classes=len(LABEL_MAP)).to(device)
+    use_amp = device.type == "cuda"
+    scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
 
-    criterion = nn.CrossEntropyLoss(weight=torch.tensor([1.0, 2.0])).to(device)
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.1).to(device)
 
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=LEARNING_RATE,
+        weight_decay=WEIGHT_DECAY
     )
 
     # create learning rate scheduler
@@ -263,6 +300,9 @@ def main():
     )
 
     history = []
+    best_val_accuracy = 0.0
+    epochs_without_improvement = 0
+    best_model_state = None
 
     # main training loop
     training_start_time = datetime.now()
@@ -270,16 +310,25 @@ def main():
     for epoch in range(1, EPOCHS + 1):
         # run training epoch
         train_loss, train_accuracy = run_epoch(
-            model, train_loader, criterion, device, optimizer, epoch=epoch, scheduler=scheduler
+            model,
+            train_loader,
+            criterion,
+            device,
+            optimizer,
+            epoch=epoch,
+            scheduler=scheduler,
+            scaler=scaler,
         )
 
         # run validation
         val_loss, val_accuracy = run_epoch(
-            model, val_loader, criterion, device, epoch=epoch
+            model,
+            val_loader,
+            criterion,
+            device,
+            epoch=epoch,
+            scaler=scaler,
         )
-
-        # step scheduler at end of each epoch
-        scheduler.step()
 
         # add current epoch results to history
         history.append({
@@ -290,15 +339,38 @@ def main():
             "val_accuracy": val_accuracy,
         })
 
+        # if val accuracy is higher, store this model
+        if val_accuracy > best_val_accuracy:
+            best_val_accuracy = val_accuracy
+            epochs_without_improvement = 0
+            best_model_state = {
+                key: value.detach().cpu().clone()
+                for key, value in model.state_dict().items()
+            }
+        else:
+            epochs_without_improvement += 1
+
         print(
             f"Epoch {epoch:02d}/{EPOCHS} | "
             f"Train loss: {train_loss:.4f}, accuracy: {train_accuracy:.2%} | "
             f"Val loss: {val_loss:.4f}, accuracy: {val_accuracy:.2%}"
         )
 
+        # if validation stops improving, early stop
+        if epochs_without_improvement >= EARLY_STOPPING_PATIENCE:
+            print(
+                f"Early stopping after {EARLY_STOPPING_PATIENCE} epochs "
+                "without validation accuracy improvement."
+            )
+            break
+
     print("\n--- Finished Training ---")
     training_elapsed = datetime.now() - training_start_time
     training_seconds = int(training_elapsed.total_seconds())
+
+    # use the best validation checkpoint for saving and test evaluation
+    if best_model_state is not None:
+        model.load_state_dict(best_model_state)
 
     # create a directory for this runs model and plot
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
@@ -324,6 +396,7 @@ def main():
         device,
         training_seconds,
         run_dir,
+        scaler=scaler,
     )
 
 
