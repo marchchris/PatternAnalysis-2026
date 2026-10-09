@@ -1,3 +1,4 @@
+import argparse
 from datetime import datetime
 from pathlib import Path
 from time import perf_counter
@@ -9,6 +10,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 
 from dataset import create_dataloaders
 from modules import build_model
+
 
 DATASET_ROOT = "~/Documents/Datasets/ADNI/AD_NC"
 SEED = 42
@@ -32,6 +34,7 @@ def run_epoch(
     device,
     optimizer=None,
     epoch=None,
+    total_epochs=EPOCHS,
     scaler=None,
 ):
     """Train when an optimizer is provided, otherwise evaluate the model"""
@@ -81,7 +84,7 @@ def run_epoch(
             if epoch is not None:
                 phase = "Training" if training else "Validation"
                 print(
-                    f"{phase} - Epoch {epoch}/{EPOCHS} - "
+                    f"{phase} - Epoch {epoch}/{total_epochs} - "
                     f"Step {step}/{total_steps} "
                     f"({step / total_steps:.0%}) - "
                     f"Loss: {loss.item():.4f}",
@@ -258,14 +261,61 @@ def evaluate_test(
         run_dir,
     )
 
+def parse_args():
+    """Parse command-line training configuration."""
+    parser = argparse.ArgumentParser(
+        description="Train an ADNI image classification model."
+    )
+    parser.add_argument("--seed", type=int, default=SEED)
+    parser.add_argument(
+        "--model-name",
+        choices=["resnet18", "convnext"],
+        default=MODEL_NAME,
+    )
+    parser.add_argument("--batch-size", type=int, default=BATCH_SIZE)
+    parser.add_argument("--epochs", type=int, default=EPOCHS)
+    parser.add_argument(
+        "--early-stopping-patience",
+        type=int,
+        default=EARLY_STOPPING_PATIENCE,
+    )
+    parser.add_argument("--learning-rate", type=float, default=LEARNING_RATE)
+    parser.add_argument("--weight-decay", type=float, default=WEIGHT_DECAY)
+    parser.add_argument("--num-workers", type=int, default=NUM_WORKERS)
+    parser.add_argument("--warmup-epochs", type=int, default=WARMUP_EPOCHS)
+    args = parser.parse_args()
+
+    if args.batch_size < 1:
+        parser.error("--batch-size must be at least 1")
+    if args.epochs < 1:
+        parser.error("--epochs must be at least 1")
+    if args.early_stopping_patience < 1:
+        parser.error("--early-stopping-patience must be at least 1")
+    if args.learning_rate <= 0:
+        parser.error("--learning-rate must be greater than 0")
+    if args.weight_decay < 0:
+        parser.error("--weight-decay cannot be negative")
+    if args.num_workers < 0:
+        parser.error("--num-workers cannot be negative")
+    if args.warmup_epochs < 0 or args.warmup_epochs >= args.epochs:
+        parser.error("--warmup-epochs must be at least 0 and less than --epochs")
+
+    return args
+
+
 def main():
+    args = parse_args()
+
     # allow reproducibility
-    torch.manual_seed(SEED)
+    torch.manual_seed(args.seed)
     if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(SEED)
+        torch.cuda.manual_seed_all(args.seed)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Model: {MODEL_NAME} training on: {torch.cuda.get_device_name(device)}")
+    device_name = (
+        torch.cuda.get_device_name(device) if device.type == "cuda" else "CPU"
+    )
+    print(f"Model: {args.model_name} training on: {device_name}")
 
     # get train, validation, and test data loaders
     train_loader, val_loader, test_loader = create_dataloaders(
@@ -273,13 +323,13 @@ def main():
         class_names=CLASS_NAMES,
         dataset_split_names=DATASET_SPLIT_NAMES,
         label_map=LABEL_MAP,
-        batch_size=BATCH_SIZE,
-        num_workers=NUM_WORKERS,
-        seed=SEED,
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
+        seed=args.seed,
     )
 
     # create model and move to GPU
-    model = build_model(MODEL_NAME, num_classes=len(LABEL_MAP)).to(device)
+    model = build_model(args.model_name, num_classes=len(LABEL_MAP)).to(device)
     use_amp = device.type == "cuda"
     scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
 
@@ -287,30 +337,34 @@ def main():
 
     optimizer = torch.optim.AdamW(
         model.parameters(),
-        lr=LEARNING_RATE,
-        weight_decay=WEIGHT_DECAY
+        lr=args.learning_rate,
+        weight_decay=args.weight_decay
     )
 
-    # warm up linearly for five epochs, then decay with cosine annealing
-    warmup_steps = WARMUP_EPOCHS * len(train_loader)
-    cosine_steps = (EPOCHS - WARMUP_EPOCHS) * len(train_loader)
-    scheduler = SequentialLR(
+    # warm up linearly, then decay with cosine annealing
+    warmup_steps = args.warmup_epochs * len(train_loader)
+    cosine_steps = (args.epochs - args.warmup_epochs) * len(train_loader)
+    cosine_scheduler = CosineAnnealingLR(
         optimizer,
-        schedulers=[
-            LinearLR(
-                optimizer,
-                start_factor=0.1,
-                end_factor=1.0,
-                total_iters=warmup_steps,
-            ),
-            CosineAnnealingLR(
-                optimizer,
-                T_max=cosine_steps,
-                eta_min=1e-6,
-            ),
-        ],
-        milestones=[warmup_steps],
+        T_max=cosine_steps,
+        eta_min=1e-6,
     )
+    if warmup_steps:
+        scheduler = SequentialLR(
+            optimizer,
+            schedulers=[
+                LinearLR(
+                    optimizer,
+                    start_factor=0.1,
+                    end_factor=1.0,
+                    total_iters=warmup_steps,
+                ),
+                cosine_scheduler,
+            ],
+            milestones=[warmup_steps],
+        )
+    else:
+        scheduler = cosine_scheduler
 
     history = []
     best_val_accuracy = 0.0
@@ -322,7 +376,8 @@ def main():
     # main training loop
     training_start_time = datetime.now()
     print("\n--- Beginning Training ---")
-    for epoch in range(1, EPOCHS + 1):
+
+    for epoch in range(1, args.epochs + 1):
         epoch_start_time = perf_counter()
 
         # run training epoch
@@ -333,6 +388,7 @@ def main():
             device,
             optimizer,
             epoch=epoch,
+            total_epochs=args.epochs,
             scaler=scaler,
         )
 
@@ -343,6 +399,7 @@ def main():
             criterion,
             device,
             epoch=epoch,
+            total_epochs=args.epochs,
             scaler=scaler,
         )
 
@@ -372,16 +429,16 @@ def main():
             epochs_without_improvement += 1
 
         print(
-            f"Epoch {epoch:02d}/{EPOCHS} | "
+            f"Epoch {epoch:02d}/{args.epochs} | "
             f"Train loss: {train_loss:.4f}, accuracy: {train_accuracy:.2%} | "
             f"Val loss: {val_loss:.4f}, accuracy: {val_accuracy:.2%} | "
             f"Time: {epoch_seconds:.2f}s"
         )
 
         # if validation stops improving, early stop
-        if epochs_without_improvement >= EARLY_STOPPING_PATIENCE:
+        if epochs_without_improvement >= args.early_stopping_patience:
             print(
-                f"Early stopping after {EARLY_STOPPING_PATIENCE} epochs "
+                f"Early stopping after {args.early_stopping_patience} epochs "
                 "without validation accuracy improvement."
             )
             break
@@ -402,11 +459,11 @@ def main():
 
     # create a directory for this runs model and plot
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    run_dir = Path("Models") / MODEL_NAME / f"{MODEL_NAME}_{timestamp}"
+    run_dir = Path("Models") / args.model_name / f"{args.model_name}_{timestamp}"
     run_dir.mkdir(parents=True, exist_ok=True)
 
     # save model under the run directory
-    model_path = run_dir / f"{MODEL_NAME}.pth"
+    model_path = run_dir / f"{args.model_name}.pth"
     torch.save(model.state_dict(), model_path)
     print(f"Saved model to: {model_path}")
 
