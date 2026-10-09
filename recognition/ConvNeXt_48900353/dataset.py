@@ -19,14 +19,6 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision.transforms import functional as TF
 from torchvision.transforms import v2
 
-from config import (
-    CLASS_NAMES,
-    DATASET_SPLIT_NAMES,
-    DATASET_ROOT,
-    SEED,
-    LABEL_MAP,
-)
-
 IMAGE_SIZE = (224, 224)
 
 TRAIN_TRANSFORM = v2.Compose([
@@ -60,14 +52,14 @@ def subject_id_from_filename(path):
     return parts[0]
 
 
-def build_image_table(dataset_root):
+def build_image_table(dataset_root, class_names, dataset_split_names):
     """Build image records containing paths, classes, and subject IDs."""
     dataset_root = Path(dataset_root).expanduser().resolve()
     rows = []
 
     # iterate through all folders in dataset
-    for split in DATASET_SPLIT_NAMES:
-        for class_name in CLASS_NAMES:
+    for split in dataset_split_names:
+        for class_name in class_names:
             folder = dataset_root / split / class_name
 
              # get paths to all images in folder
@@ -87,10 +79,14 @@ def build_image_table(dataset_root):
     return rows
 
 
-def create_splits(dataset_root, seed=SEED):
+def create_splits(dataset_root, class_names, dataset_split_names, seed):
     """Create subject splits and print dataset summaries."""
     # create table where each row is exactly one image with its subject ID
-    image_records = build_image_table(dataset_root)
+    image_records = build_image_table(
+        dataset_root,
+        class_names,
+        dataset_split_names,
+    )
 
     # split subjects into 70% training and 30% for validation/testing
     subjects_by_id = {}
@@ -136,7 +132,7 @@ def create_splits(dataset_root, seed=SEED):
         class_counts = Counter(record["class_name"] for record in split_records)
         print("\n".join(
             f"{class_name}    {class_counts[class_name]}"
-            for class_name in CLASS_NAMES
+            for class_name in class_names
             if class_counts[class_name]
         ))
 
@@ -152,12 +148,13 @@ def preprocess_image(image, augment=False):
 class ADNIDataset(Dataset):
     """Dataset for loading and preprocessing a split of ADNI images"""
 
-    def __init__(self, records, augment=False):
+    def __init__(self, records, label_map, augment=False):
         self.samples = [
             (record["image_path"], record["class_name"])
             for record in records
         ]
         self.transform = TRAIN_TRANSFORM if augment else EVAL_TRANSFORM
+        self.label_map = label_map
 
     def __len__(self):
         return len(self.samples)
@@ -166,19 +163,34 @@ class ADNIDataset(Dataset):
         image_path, class_name = self.samples[index]
         with Image.open(image_path) as image:
             image_tensor = self.transform(image)
-        label = torch.tensor(LABEL_MAP[class_name], dtype=torch.long)
+        label = torch.tensor(self.label_map[class_name], dtype=torch.long)
         return image_tensor, label
 
 
-def create_dataloaders(dataset_root, batch_size=32, num_workers=0, seed=SEED,):
+def create_dataloaders(
+    dataset_root,
+    class_names,
+    dataset_split_names,
+    label_map,
+    seed,
+    batch_size=32,
+    num_workers=0,
+):
     """Return train, validation, and test loaders"""
 
-    splits = create_splits(dataset_root, seed)
+    splits = create_splits(
+        dataset_root,
+        class_names,
+        dataset_split_names,
+        seed,
+    )
 
     datasets = []
     for split_index, frame in enumerate(splits):
         is_training = split_index == 0
-        datasets.append(ADNIDataset(frame, augment=is_training))
+        datasets.append(
+            ADNIDataset(frame, label_map, augment=is_training)
+        )
 
     loaders = []
     for split_index, dataset in enumerate(datasets):
@@ -194,7 +206,7 @@ def create_dataloaders(dataset_root, batch_size=32, num_workers=0, seed=SEED,):
     return tuple(loaders)
 
 
-def show_examples(images, labels, count=6):
+def show_examples(images, labels, class_names, count=6):
     """Display a sample of images and their class labels from a batch"""
 
     import matplotlib.pyplot as plt
@@ -213,7 +225,7 @@ def show_examples(images, labels, count=6):
 
     for index in range(count):
         axes[index].imshow(images[index, 0].numpy(), cmap="gray")
-        axes[index].set_title(CLASS_NAMES[labels[index].item()])
+        axes[index].set_title(class_names[labels[index].item()])
         axes[index].axis("off")
     for axis in axes[count:]:
         axis.axis("off")
@@ -222,11 +234,23 @@ def show_examples(images, labels, count=6):
 
 
 if __name__ == "__main__":
+    from train import (
+        CLASS_NAMES,
+        DATASET_ROOT,
+        DATASET_SPLIT_NAMES,
+        LABEL_MAP,
+        SEED,
+    )
+
     train_loader, val_loader, test_loader = create_dataloaders(
-        DATASET_ROOT
+        DATASET_ROOT,
+        CLASS_NAMES,
+        DATASET_SPLIT_NAMES,
+        LABEL_MAP,
+        seed=SEED,
     )
     images, labels = next(iter(train_loader))
     print(f"\nImage batch shape: {images.shape}")
     print(f"Label batch shape: {labels.shape}")
     print(f"Pixel range: {images.min().item():.3f} to {images.max().item():.3f}")
-    show_examples(images, labels)
+    show_examples(images, labels, CLASS_NAMES)

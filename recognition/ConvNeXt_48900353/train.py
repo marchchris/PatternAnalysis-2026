@@ -1,23 +1,29 @@
 from datetime import datetime
 from pathlib import Path
+from time import perf_counter
 import torch
 from torch import nn
 import matplotlib.pyplot as plt
 from sklearn.metrics import accuracy_score, confusion_matrix, precision_recall_fscore_support, roc_auc_score
 from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 
-from config import LABEL_MAP, SEED, DATASET_ROOT
 from dataset import create_dataloaders
 from modules import build_model
 
+DATASET_ROOT = "~/Documents/Datasets/ADNI/AD_NC"
+SEED = 42
 MODEL_NAME = "convnext"
 BATCH_SIZE = 64
-EPOCHS = 100
+EPOCHS = 200
 EARLY_STOPPING_PATIENCE = 1000
 LEARNING_RATE = 1e-3
 WEIGHT_DECAY = 1e-4
 NUM_WORKERS = 4
 WARMUP_EPOCHS = 5
+
+CLASS_NAMES = ["NC", "AD"]
+LABEL_MAP = {"NC": 0, "AD": 1}
+DATASET_SPLIT_NAMES = ["train", "test"]
 
 def run_epoch(
     model,
@@ -126,6 +132,7 @@ def save_test_report(
     ad_probabilities,
     test_loss,
     training_seconds,
+    average_epoch_seconds,
     run_dir,
 ):
     """Calculate, save, and visualize test statistics with AD as the positive class."""
@@ -152,6 +159,7 @@ def save_test_report(
     report_lines = [
         "\nModel Training Report:\n"
         f"Training time: {training_minutes}m {training_remaining_seconds}s\n",
+        f"Average time per epoch: {average_epoch_seconds:.2f}s\n",
 
         "\nTest Set Evaluation Report:",
         f"Test loss: {test_loss:.4f}",
@@ -206,6 +214,7 @@ def evaluate_test(
     device,
     training_seconds,
     run_dir,
+    average_epoch_seconds,
     scaler=None,
 ):
     """Evaluates the test set once after training without updating the model"""
@@ -245,6 +254,7 @@ def evaluate_test(
         all_ad_probabilities,
         test_loss,
         training_seconds,
+        average_epoch_seconds,
         run_dir,
     )
 
@@ -260,6 +270,9 @@ def main():
     # get train, validation, and test data loaders
     train_loader, val_loader, test_loader = create_dataloaders(
         dataset_root=DATASET_ROOT,
+        class_names=CLASS_NAMES,
+        dataset_split_names=DATASET_SPLIT_NAMES,
+        label_map=LABEL_MAP,
         batch_size=BATCH_SIZE,
         num_workers=NUM_WORKERS,
         seed=SEED,
@@ -301,13 +314,17 @@ def main():
 
     history = []
     best_val_accuracy = 0.0
+    best_epoch = 0
     epochs_without_improvement = 0
     best_model_state = None
+    epoch_times = []
 
     # main training loop
     training_start_time = datetime.now()
     print("\n--- Beginning Training ---")
     for epoch in range(1, EPOCHS + 1):
+        epoch_start_time = perf_counter()
+
         # run training epoch
         train_loss, train_accuracy = run_epoch(
             model,
@@ -330,6 +347,8 @@ def main():
         )
 
         scheduler.step()
+        epoch_seconds = perf_counter() - epoch_start_time
+        epoch_times.append(epoch_seconds)
 
         # add current epoch results to history
         history.append({
@@ -341,8 +360,9 @@ def main():
         })
 
         # if val accuracy is higher, store this model
-        if val_accuracy > best_val_accuracy:
+        if best_model_state is None or val_accuracy > best_val_accuracy:
             best_val_accuracy = val_accuracy
+            best_epoch = epoch
             epochs_without_improvement = 0
             best_model_state = {
                 key: value.detach().cpu().clone()
@@ -354,7 +374,8 @@ def main():
         print(
             f"Epoch {epoch:02d}/{EPOCHS} | "
             f"Train loss: {train_loss:.4f}, accuracy: {train_accuracy:.2%} | "
-            f"Val loss: {val_loss:.4f}, accuracy: {val_accuracy:.2%}"
+            f"Val loss: {val_loss:.4f}, accuracy: {val_accuracy:.2%} | "
+            f"Time: {epoch_seconds:.2f}s"
         )
 
         # if validation stops improving, early stop
@@ -368,10 +389,16 @@ def main():
     print("\n--- Finished Training ---")
     training_elapsed = datetime.now() - training_start_time
     training_seconds = int(training_elapsed.total_seconds())
+    average_epoch_seconds = sum(epoch_times) / len(epoch_times)
 
     # use the best validation checkpoint for saving and test evaluation
     if best_model_state is not None:
         model.load_state_dict(best_model_state)
+
+    print(
+        f"Saving model from epoch {best_epoch} "
+        f"with validation accuracy {best_val_accuracy:.2%}."
+    )
 
     # create a directory for this runs model and plot
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
@@ -397,6 +424,7 @@ def main():
         device,
         training_seconds,
         run_dir,
+        average_epoch_seconds,
         scaler=scaler,
     )
 

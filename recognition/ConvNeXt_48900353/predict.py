@@ -12,9 +12,9 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import torch
 
-from config import DATASET_ROOT, LABEL_MAP, SEED
 from dataset import create_splits, preprocess_image
 from modules import build_model
+from train import DATASET_ROOT, LABEL_MAP, SEED, CLASS_NAMES, DATASET_SPLIT_NAMES
 
 def load_model(model_name, weights_path, device):
     """Load the saved model"""
@@ -31,15 +31,16 @@ def load_model(model_name, weights_path, device):
     return model
 
 def predict_image(model, image_path, device):
-    """Returns the preprocessed image and probabilities"""
+    """Returns the original image and prediction probabilities."""
     with Image.open(image_path) as image:
-        image_tensor = preprocess_image(image) # preprocess the image
+        original_image = image.convert("L").copy()
+        image_tensor = preprocess_image(original_image)
 
     with torch.inference_mode(): # disable gradient calculations
         logits = model(image_tensor.unsqueeze(0).to(device))
         probabilities = torch.softmax(logits, dim=1)[0].cpu()
 
-    return image_tensor, probabilities
+    return original_image, probabilities
 
 def main():
     # parse args from command line
@@ -70,6 +71,8 @@ def main():
         # otherwise use images from test split
         _, _, test_frame = create_splits(
             Path(args.dataset_root).expanduser(),
+            CLASS_NAMES,
+            DATASET_SPLIT_NAMES,
             seed=SEED
         )
 
@@ -93,7 +96,9 @@ def main():
             true_class = img["class_name"]
 
             # run inference on images
-            image_tensor, probabilities = predict_image(model, image_path, device)
+            original_image, probabilities = predict_image(
+                model, image_path, device
+            )
 
             # get model outputs
             predicted_index = probabilities.argmax().item()
@@ -114,7 +119,7 @@ def main():
             )
 
             axis = axes[index // columns, index % columns]
-            axis.imshow(image_tensor[0].numpy(), cmap="gray", vmin=0, vmax=1)
+            axis.imshow(original_image, cmap="gray", vmin=0, vmax=255)
             colour = "green" if predicted_class == true_class else "red"
 
             axis.set_title(
