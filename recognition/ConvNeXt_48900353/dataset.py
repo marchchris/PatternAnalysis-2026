@@ -53,9 +53,17 @@ TRAIN_TRANSFORM = v2.Compose([
     v2.RandomHorizontalFlip(p=0.5),
     v2.RandomVerticalFlip(p=0.2),
     # v2.RandomRotation(degrees=10),
-    v2.RandomAffine(degrees=10, translate=(0.05, 0.05), scale=(0.9, 1.1)),
+    v2.RandomAffine(degrees=15, translate=(0.1, 0.1), scale=(0.9, 1.1), shear=5),
+
+    v2.GaussianBlur(kernel_size=(3, 3), sigma=(0.1, 1.0)),
+    v2.ColorJitter(brightness=0.2, contrast=0.2),
+
     v2.ToImage(),
     v2.ToDtype(torch.float32, scale=True),
+
+    v2.RandomErasing(p=0.25),
+
+
     v2.Normalize(mean=[0.5], std=[0.5]),
 ])
 

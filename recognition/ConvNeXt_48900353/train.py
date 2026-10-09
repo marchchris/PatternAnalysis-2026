@@ -12,10 +12,10 @@ from modules import build_model
 
 MODEL_NAME = "convnext"
 BATCH_SIZE = 64
-EPOCHS = 50
+EPOCHS = 200
 EARLY_STOPPING_PATIENCE = 1000
 LEARNING_RATE = 1e-4
-WEIGHT_DECAY = 1e-4
+WEIGHT_DECAY = 1e-2
 NUM_WORKERS = 4
 
 def run_epoch(
@@ -296,7 +296,7 @@ def main():
         pct_start=0.3,
         anneal_strategy='cos',
         div_factor=10,
-        final_div_factor=1e4
+        final_div_factor= (LEARNING_RATE * 5) / (10 * 1e-5)
     )
 
     history = []
