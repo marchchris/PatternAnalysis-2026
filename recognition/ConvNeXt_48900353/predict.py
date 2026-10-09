@@ -7,6 +7,7 @@ python predict.py --model [model_name] --weights [saved_model_path]
 import argparse
 from datetime import datetime
 from pathlib import Path
+from random import Random
 import matplotlib.pyplot as plt
 from PIL import Image
 import torch
@@ -73,7 +74,11 @@ def main():
         )
 
         # sample images from test split
-        imgs = test_frame.sample(n=args.num_images, random_state=SEED).to_dict("records")
+        if args.num_images > len(test_frame):
+            parser.error(
+                f"--num-images cannot exceed the {len(test_frame)} test images"
+            )
+        imgs = Random(SEED).sample(test_frame, args.num_images)
 
         # calculate how many rows and columns needed in output image
         columns = min(3, len(imgs))

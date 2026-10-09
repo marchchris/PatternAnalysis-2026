@@ -1,17 +1,17 @@
 """
-File for dataset loading, loading images, connecting images to patients, creating patient splits, 
+File for dataset loading, loading images, connecting images to subjects, creating subject splits,
 and applying preprocessing steps ready to be inputted to models.
 
-Images are collected from each dataset split and class folder, then each scan ID is
+Images are collected from each dataset split and class folder, then each subject ID is
 extracted from the filename before its slice index. The resulting image table is split
-into training, validation, and test sets by scan, ensuring that slices from the same
-scan remain in only one split.
+into training, validation, and test sets by subject, ensuring that slices from the same
+subject remain in only one split.
 
 """
 
 from pathlib import Path
+from collections import Counter
 
-import pandas as pd
 import torch
 from PIL import Image
 from sklearn.model_selection import train_test_split
@@ -29,39 +29,7 @@ from config import (
 
 IMAGE_SIZE = (224, 224)
 
-def normalise_images(image):
-    """Normalise images to mean 0 and standard deviation 1"""
-    values = TF.pil_to_tensor(image.convert("L")).to(torch.float32)
-    mean = values.mean()
-    std = values.std(correction=0)
-    values.sub_(mean).div_(std + 1e-5)
-
-    minimum, maximum = torch.aminmax(values)
-    values.sub_(minimum).div_(maximum - minimum + 1e-5).mul_(255)
-    return TF.to_pil_image(values.to(torch.uint8))
-
-
 TRAIN_TRANSFORM = v2.Compose([
-    # v2.Lambda(normalise_images),
-    # v2.Resize(IMAGE_SIZE),
-    # v2.RandomResizedCrop(size=IMAGE_SIZE, scale=(0.9, 1.0)),
-    # v2.RandomHorizontalFlip(p=0.5),
-    # v2.RandomVerticalFlip(p=0.2),
-    # # v2.RandomRotation(degrees=10),
-    # v2.RandomAffine(degrees=15, translate=(0.1, 0.1), scale=(0.9, 1.1), shear=5),
-
-    # v2.GaussianBlur(kernel_size=(3, 3), sigma=(0.1, 1.0)),
-    # v2.ColorJitter(brightness=0.2, contrast=0.2),
-
-    # v2.ToImage(),
-    # v2.ToDtype(torch.float32, scale=True),
-
-    # v2.RandomErasing(p=0.25),
-
-
-    # v2.Normalize(mean=[0.5], std=[0.5]),
-
-    v2.Lambda(normalise_images),
     v2.Resize((256, 256)),
     v2.RandomResizedCrop(224, scale=(0.9, 1.0), ratio=(0.9, 1.1)),
     v2.RandomHorizontalFlip(p=0.5),
@@ -74,26 +42,26 @@ TRAIN_TRANSFORM = v2.Compose([
     v2.GaussianBlur(kernel_size=3, sigma=(0.1, 1.0)),
     v2.ToImage(),
     v2.ToDtype(torch.float32, scale=True),
-    v2.Normalize(mean=[0.5], std=[0.5]),
+    v2.Normalize(mean=[0.1160], std=[0.2230]),
+
 ])
 
 EVAL_TRANSFORM = v2.Compose([
-    v2.Lambda(normalise_images),
     v2.Resize(IMAGE_SIZE),
     v2.ToImage(),
     v2.ToDtype(torch.float32, scale=True),
-    v2.Normalize(mean=[0.5], std=[0.5]),
+    v2.Normalize(mean=[0.1160], std=[0.2230]),
 ])
 
 
-def scan_id_from_filename(path):
-    """Extract the scan ID from a filename containing a slice index."""
+def subject_id_from_filename(path):
+    """Extract the subject ID from a filename containing a slice index."""
     parts = Path(path).stem.split("_")
     return parts[0]
 
 
 def build_image_table(dataset_root):
-    """Build a table containing image paths, classes, and scan IDs."""
+    """Build image records containing paths, classes, and subject IDs."""
     dataset_root = Path(dataset_root).expanduser().resolve()
     rows = []
 
@@ -108,54 +76,69 @@ def build_image_table(dataset_root):
                 if path.suffix.lower() == ".jpeg" and path.is_file()
             )
 
-            # append (image path, class, scan id)
+            # append (image path, class, subject id)
             for path in paths:
-                scan_id = scan_id_from_filename(path)
-                rows.append((str(path), class_name, scan_id))
-
-    return pd.DataFrame.from_records(
-        rows, columns=["image_path", "class_name", "scan_id"]
-    )
+                subject_id = subject_id_from_filename(path)
+                rows.append({
+                    "image_path": str(path),
+                    "class_name": class_name,
+                    "subject_id": subject_id,
+                })
+    return rows
 
 
 def create_splits(dataset_root, seed=SEED):
-    """Create patient splits and print dataset summaries"""
-    # create table where each row is exactly one image with its scan ID
-    dataset_df = build_image_table(dataset_root)
+    """Create subject splits and print dataset summaries."""
+    # create table where each row is exactly one image with its subject ID
+    image_records = build_image_table(dataset_root)
 
-    # split scans into 70% training and 30% for validation/testing
-    scans = dataset_df[["scan_id", "class_name"]].drop_duplicates("scan_id")
+    # split subjects into 70% training and 30% for validation/testing
+    subjects_by_id = {}
+    for record in image_records:
+        subjects_by_id.setdefault(
+            record["subject_id"],
+            {"subject_id": record["subject_id"], "class_name": record["class_name"]},
+        )
+    subjects = list(subjects_by_id.values())
     train, remaining = train_test_split(
-        scans,
+        subjects,
         test_size=0.3,
-        stratify=scans["class_name"],
+        stratify=[subject["class_name"] for subject in subjects],
         random_state=seed,
     )
     val, test = train_test_split(
         remaining,
         test_size=1 / 3, # one third of the remaining 30% is 10% overall
-        stratify=remaining["class_name"],
+        stratify=[subject["class_name"] for subject in remaining],
         random_state=seed,
     )
 
     # count all images
-    image_count = len(dataset_df)
-    print(f"Total: {image_count} images from {len(scans)} scans")
+    image_count = len(image_records)
+    print(f"Total: {image_count} images from {len(subjects)} subjects")
     splits = []
 
-    # build each split from scan IDs so all slices from one scan stay together
+    # build each split from subject IDs so all slices from one subject stay together
     for name, group in (("Train", train), ("Validation", val), ("Test", test)):
-        frame = dataset_df.loc[
-            dataset_df["scan_id"].isin(group["scan_id"])
-        ].reset_index(drop=True)
-        splits.append(frame)
+        subject_ids = {subject["subject_id"] for subject in group}
+        split_records = [
+            record for record in image_records
+            if record["subject_id"] in subject_ids
+        ]
+        splits.append(split_records)
 
-        # print image and patient counts, and class distributions
+        # print image and subject counts, and class distributions
         print(
-            f"\n{name}: {len(frame)} images ({len(frame) / image_count:.2%}), "
-            f"{len(group)} scans"
+            f"\n{name}: {len(split_records)} images "
+            f"({len(split_records) / image_count:.2%}), "
+            f"{len(group)} subjects"
         )
-        print(frame["class_name"].value_counts().to_string())
+        class_counts = Counter(record["class_name"] for record in split_records)
+        print("\n".join(
+            f"{class_name}    {class_counts[class_name]}"
+            for class_name in CLASS_NAMES
+            if class_counts[class_name]
+        ))
 
     return tuple(splits)
 
@@ -169,12 +152,11 @@ def preprocess_image(image, augment=False):
 class ADNIDataset(Dataset):
     """Dataset for loading and preprocessing a split of ADNI images"""
 
-    def __init__(self, frame, augment=False):
-        self.samples = list(
-            frame[["image_path", "class_name"]].itertuples(
-                index=False, name=None
-            )
-        )
+    def __init__(self, records, augment=False):
+        self.samples = [
+            (record["image_path"], record["class_name"])
+            for record in records
+        ]
         self.transform = TRAIN_TRANSFORM if augment else EVAL_TRANSFORM
 
     def __len__(self):
