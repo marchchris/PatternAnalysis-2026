@@ -4,19 +4,20 @@ import torch
 from torch import nn
 import matplotlib.pyplot as plt
 from sklearn.metrics import accuracy_score, confusion_matrix, precision_recall_fscore_support, roc_auc_score
-from torch.optim.lr_scheduler import OneCycleLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 
-from config import LABEL_MAP, SEED, DATASET_ROOT, METADATA_PATH
+from config import LABEL_MAP, SEED, DATASET_ROOT
 from dataset import create_dataloaders
 from modules import build_model
 
 MODEL_NAME = "convnext"
 BATCH_SIZE = 64
-EPOCHS = 200
+EPOCHS = 100
 EARLY_STOPPING_PATIENCE = 1000
-LEARNING_RATE = 1e-4
-WEIGHT_DECAY = 1e-2
+LEARNING_RATE = 1e-3
+WEIGHT_DECAY = 1e-4
 NUM_WORKERS = 4
+WARMUP_EPOCHS = 5
 
 def run_epoch(
     model,
@@ -25,7 +26,6 @@ def run_epoch(
     device,
     optimizer=None,
     epoch=None,
-    scheduler=None,
     scaler=None,
 ):
     """Train when an optimizer is provided, otherwise evaluate the model"""
@@ -60,20 +60,12 @@ def run_epoch(
             # update weights if training model
             if training:
                 if scaler is not None:
-                    scale_before_step = scaler.get_scale()
                     scaler.scale(loss).backward()
                     scaler.step(optimizer)
                     scaler.update()
-                    optimizer_step_completed = (
-                        scaler.get_scale() >= scale_before_step
-                    )
                 else:
                     loss.backward()
                     optimizer.step()
-                    optimizer_step_completed = True
-
-                if scheduler is not None and optimizer_step_completed:
-                    scheduler.step()
 
             # weight by batch size so final batch is counted correctly
             total_loss += loss.item() * labels.size(0)
@@ -206,7 +198,7 @@ def save_test_report(
     plt.close(confusion_figure)
     print(f"Saved confusion matrix image to: {confusion_plot_path}")
 
-
+@torch.inference_mode()
 def evaluate_test(
     model,
     test_loader,
@@ -268,7 +260,6 @@ def main():
     # get train, validation, and test data loaders
     train_loader, val_loader, test_loader = create_dataloaders(
         dataset_root=DATASET_ROOT,
-        metadata_path=METADATA_PATH,
         batch_size=BATCH_SIZE,
         num_workers=NUM_WORKERS,
         seed=SEED,
@@ -287,16 +278,25 @@ def main():
         weight_decay=WEIGHT_DECAY
     )
 
-    # create learning rate scheduler
-    scheduler = OneCycleLR(
+    # warm up linearly for five epochs, then decay with cosine annealing
+    warmup_steps = WARMUP_EPOCHS * len(train_loader)
+    cosine_steps = (EPOCHS - WARMUP_EPOCHS) * len(train_loader)
+    scheduler = SequentialLR(
         optimizer,
-        max_lr=LEARNING_RATE * 5,
-        steps_per_epoch=len(train_loader),
-        epochs=EPOCHS,
-        pct_start=0.3,
-        anneal_strategy='cos',
-        div_factor=10,
-        final_div_factor= (LEARNING_RATE * 5) / (10 * 1e-5)
+        schedulers=[
+            LinearLR(
+                optimizer,
+                start_factor=0.1,
+                end_factor=1.0,
+                total_iters=warmup_steps,
+            ),
+            CosineAnnealingLR(
+                optimizer,
+                T_max=cosine_steps,
+                eta_min=1e-6,
+            ),
+        ],
+        milestones=[warmup_steps],
     )
 
     history = []
@@ -316,7 +316,6 @@ def main():
             device,
             optimizer,
             epoch=epoch,
-            scheduler=scheduler,
             scaler=scaler,
         )
 
@@ -329,6 +328,8 @@ def main():
             epoch=epoch,
             scaler=scaler,
         )
+
+        scheduler.step()
 
         # add current epoch results to history
         history.append({

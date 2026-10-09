@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import torch
 
-from config import DATASET_ROOT, LABEL_MAP, METADATA_PATH, SEED
+from config import DATASET_ROOT, LABEL_MAP, SEED
 from dataset import create_splits, preprocess_image
 from modules import build_model
 
@@ -48,7 +48,6 @@ def main():
     parser.add_argument("--image", help="Optional single image to predict")
     parser.add_argument("--num-images", type=int, default=9, help="Number of test examples")
     parser.add_argument("--dataset-root", default=DATASET_ROOT)
-    parser.add_argument("--metadata-path", default=METADATA_PATH)
     parser.add_argument("--output", default="Inferences/predictions.png", help="Output figure path")
     args = parser.parse_args()
 
@@ -70,7 +69,6 @@ def main():
         # otherwise use images from test split
         _, _, test_frame = create_splits(
             Path(args.dataset_root).expanduser(),
-            Path(args.metadata_path).expanduser(),
             seed=SEED
         )
 
