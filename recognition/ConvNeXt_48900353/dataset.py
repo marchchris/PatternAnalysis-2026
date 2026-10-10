@@ -204,35 +204,7 @@ def create_dataloaders(
         ))
     return tuple(loaders)
 
-
-def show_examples(images, labels, class_names, count=6):
-    """Display a sample of images and their class labels from a batch"""
-
-    import matplotlib.pyplot as plt
-
-    count = min(count, images.size(0))
-
-    images = images[:count].detach().cpu()
-    labels = labels[:count].detach().cpu()
-    
-    columns = min(count, 3)
-    rows = (count + columns - 1) // columns
-    figure, axes = plt.subplots(
-        rows, columns, figsize=(4 * columns, 4 * rows), squeeze=False
-    )
-    axes = axes.ravel()
-
-    for index in range(count):
-        axes[index].imshow(images[index, 0].numpy(), cmap="gray")
-        axes[index].set_title(class_names[labels[index].item()])
-        axes[index].axis("off")
-    for axis in axes[count:]:
-        axis.axis("off")
-    figure.tight_layout()
-    plt.show()
-
-
-def show_augmentation_comparison(dataset, class_names, count=6):
+def show_augmentation_comparison(dataset, count=6):
     """Display the same samples before and after training augmentation."""
 
     import matplotlib.pyplot as plt
@@ -240,23 +212,19 @@ def show_augmentation_comparison(dataset, class_names, count=6):
     count = min(count, len(dataset.samples))
     original_images = []
     augmented_images = []
-    labels = []
 
-    for image_path, class_name in dataset.samples[:count]:
+    for image_path, _ in dataset.samples[:count]:
         with Image.open(image_path) as image:
             original_images.append(preprocess_image(image, augment=False))
             augmented_images.append(preprocess_image(image, augment=True))
-        labels.append(dataset.label_map[class_name])
 
     original_images = torch.stack(original_images)
     augmented_images = torch.stack(augmented_images)
-    labels = torch.tensor(labels)
 
-    columns = min(count, 3)
+    columns = count
     figure, axes = plt.subplots(
         2, columns, figsize=(4 * columns, 8), squeeze=False
     )
-    axes = axes.ravel()
 
     mean = torch.tensor([0.1160]).view(1, 1, 1)
     std = torch.tensor([0.2230]).view(1, 1, 1)
@@ -264,20 +232,24 @@ def show_augmentation_comparison(dataset, class_names, count=6):
         original = (original_images[index] * std + mean).clamp(0, 1)
         augmented = (augmented_images[index] * std + mean).clamp(0, 1)
 
-        axes[index].imshow(original[0].numpy(), cmap="gray", vmin=0, vmax=1)
-        axes[index].set_title(
-            f"Before augmentation\n{class_names[labels[index].item()]}"
+        axes[0, index].imshow(
+            original[0].numpy(), cmap="gray", vmin=0, vmax=1
         )
-        axes[columns + index].imshow(
+        axes[1, index].imshow(
             augmented[0].numpy(), cmap="gray", vmin=0, vmax=1
         )
-        axes[columns + index].set_title(
-            f"After augmentation\n{class_names[labels[index].item()]}"
-        )
 
-    for axis in axes:
+    for axis in axes.ravel():
         axis.axis("off")
-    figure.tight_layout()
+    figure.text(
+        0.01, 0.75, "Before\naugmentation",
+        ha="left", va="center",
+    )
+    figure.text(
+        0.01, 0.25, "After\naugmentation",
+        ha="left", va="center",
+    )
+    figure.subplots_adjust(left=0.08, wspace=0.05, hspace=0.05)
     plt.show()
 
 
@@ -301,4 +273,4 @@ if __name__ == "__main__":
     print(f"\nImage batch shape: {images.shape}")
     print(f"Label batch shape: {labels.shape}")
     print(f"Pixel range: {images.min().item():.3f} to {images.max().item():.3f}")
-    show_augmentation_comparison(train_loader.dataset, CLASS_NAMES)
+    show_augmentation_comparison(train_loader.dataset)
