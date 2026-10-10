@@ -8,6 +8,7 @@ import argparse
 from datetime import datetime
 from pathlib import Path
 from random import Random
+from time import perf_counter
 import matplotlib.pyplot as plt
 from PIL import Image
 import torch
@@ -31,16 +32,27 @@ def load_model(model_name, weights_path, device):
     return model
 
 def predict_image(model, image_path, device):
-    """Returns the original image and prediction probabilities."""
+    """Returns the original image, probabilities, inference time, and peak VRAM."""
     with Image.open(image_path) as image:
         original_image = image.convert("L").copy()
         image_tensor = preprocess_image(original_image)
 
+    # Exclude image loading and preprocessing so this measures model performance only.
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device)
+        torch.cuda.synchronize(device)
+    start_time = perf_counter()
     with torch.inference_mode(): # disable gradient calculations
         logits = model(image_tensor.unsqueeze(0).to(device))
         probabilities = torch.softmax(logits, dim=1)[0].cpu()
+    if device.type == "cuda":
+        torch.cuda.synchronize(device)
+    inference_time = perf_counter() - start_time
+    peak_vram_bytes = (
+        torch.cuda.max_memory_allocated(device) if device.type == "cuda" else None
+    )
 
-    return original_image, probabilities
+    return original_image, probabilities, inference_time, peak_vram_bytes
 
 def main():
     # parse args from command line
@@ -96,7 +108,12 @@ def main():
             true_class = img["class_name"]
 
             # run inference on images
-            original_image, probabilities = predict_image(
+            (
+                original_image,
+                probabilities,
+                inference_time,
+                peak_vram_bytes,
+            ) = predict_image(
                 model, image_path, device
             )
 
@@ -110,11 +127,19 @@ def main():
             # calculate number of correct predictions
             correct += int(predicted_class == true_class)
 
+            peak_vram_output = (
+                f"{peak_vram_bytes / (1024 ** 2):.2f} MB"
+                if peak_vram_bytes is not None
+                else "unavailable (CUDA not in use)"
+            )
+
             # print each run of inference
             print(
                 f"\nImage: {image_path}\n"
                 f"True: {true_class or 'unknown'} | Predicted: {predicted_class} | "
                 f"Confidence: {confidence:.2%}\n"
+                f"Prediction time: {inference_time:.4f} seconds\n"
+                f"Peak VRAM usage: {peak_vram_output}\n"
                 f"P(NC): {nc_probability:.4f} | P(AD): {ad_probability:.4f}"
             )
 

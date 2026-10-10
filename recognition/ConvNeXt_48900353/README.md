@@ -101,22 +101,217 @@ Augmentation expands the appearances observed during learning without adding mor
 | Random seed | 42 |
 | DataLoader workers | 4 |
 
-### 4.2 Regularisation
-- ConvNeXt uses 30% dropout to prevent co-adaptation.
-- Cross Entropy Loss Label smoothing to reduce overconfidence.
-- The highest validation accuracy epoch is saved even if the model continues training. This prevents the models performance degrading due to overfitting.
+Validation is run at the end of every epoch where the highest validation accuracy is the model saved. This was to ensure the highest accuracy model was saved even if the models performancce degraded afterwards due to overfitting. `200` epochs were used to allow training time for the model to properly converge. A small batch size of `64` was chosen to lower memory usage and use the stochastic noise during gradient calculations to potentially help the model escape poor local minima.
 
+### 4.2 Regularisation
+- ConvNeXt uses `30%` dropout to prevent co-adaptation.
+- ConvNext uses `10%` drop path for stochastic depth regularisation.
+- Cross Entropy Loss Label smoothing to reduce over confidence.
 ### 4.3 Learning Rate Schedule
 A combination of a linear warmup and cosine annealing was used to change learning rate during training. For the first `5` epochs the learning rate linearly increases up to the inital learning rate of `1e-3`. Then over the next `195` epochs, cosine annealing is used to progressively reduce the learning rate to `1e-6`. This helps the model achieve smooth convergence in late epoch learning as the gradient steps will be smaller.
 
 
 ![Plot of Learning rate vs epoch](images/learningrateplot.png)
 
+## 5. ResNet-18 Model Results
+
+For these results, both models were trained using a Nvidia A100 GPU. The test metrics were evaluated using the `10%` testing split.
+
+### 5.1 Training History
+The model was trained for `200` epochs which took approximately `132` minutes and `39.61` seconds per epoch. The training loss and accuracy history plots are shown below.
+
+![ResNet-18 Training History](images/resnet_training_history.png)
+
+The model saved was from epoch `167` which achieved the highest validation accuracy of `91.51%` indiciating the model is capable of generalising to unseen data. As displayed in figure (), ResNet-18 demonstrated strong learning performance steadily increasing to `99.36%` training accuracy. However, validation accuracy plateus at approximately `89-90%` after 100 epochs. This widening gap between training and validation performance indicates overfitting.
+
+
+### 5.2 Test Results
+The final model was evaluated on the hold out test set. The confusion matrix and test metrics below shows the model's performance on this unseen data.
+
+
+![alt text](images/resnet_confusion_matrix.png)
+
+| Metric | ResNet-18 |
+| --- | --- |
+| Accuracy | **90.85%** 
+| F1 | **90.85%** |
+| ROC-AUC | **94.96%** |
+
+The model achieved strong performance on the test set, with an accuracy of `90.85%`, F1-score of `90.85%` and ROC-AUC of `94.96%`. Importantly, the model achieved an AD recall (sensitivity) of `93.92%` indicating that it successfully identified the majority of Alzheimer's cases.
+
+The higher number of false positive to false negatives is prefereble in the context of Alzheimer's screening, where failing to identify a potential case may have more serious consequences than incorrectly flagging a healthy individual, who can undergo further diagnostic testing to correct the mistake.
+
+## 6. ConvNeXt Model Results
+### 6.1 Training History
+The model was trained for `200` epochs which took approximately `135` minutes and `39.78` seconds per epoch. The training loss and accuracy history plots are shown below.
+
+![ConvNeXt Training History](images/convnext_training_history.png)
+
+The model saved was from epoch `172` which achieved the highest validation accuracy of `90.57%`. Compared to ResNet-18, ConvNeXt demonstrates smoother validation performance following closely to training accuracy during earlier epochs. However, validation accuracy begins to plateu around epoch `130` were it again begins to clearly show signs of overfitting.
+
+### 6.2 Test Results
+![ConvNeXt Confusion Matrix](images/convnext_confusion_matrix.png)
+
+| Metric | ResNet-18 |
+| --- | --- |
+| Accuracy | **87.84%** 
+| F1 | **88.04%** |
+| ROC-AUC | **94.45%** |
+
+ConvNeXt achieved strong performance on the test set, with an accuracy of `87.84%`, F1-score of `88.04%` and ROC-AUC of `94.45%`. The confusion matrix shows it correctly identified less NC and AD images compared to ResNet. The model achieved a lower AD recall (sensitivity) of `92.50%` meaning ConvNeXt missed more true postives compared to ResNet.
+
+This sensitivity still shows the model is effective at identifying the majority of Alzheimer's cases but it misses an additional `21` AD images compared to ResNet. These false negatives may lead a potential early case of Alzheimer's to go un-noticed. 
+
+## 7. Analysis of Results
+### 7.1 Why Sensitivity Matters
+High sensitivity is particularly important for this Alzheimer's disease classification task because the primary objective is to identify as many individuals with the disease as possible while minimising false negatives. A false negative means potentially delaying treatment, and early intervention. In contrast, a false positive may cause uncessary anxiety and additional diagnostic testing, this error can be investigated and corrected through further clinical assessments.
+
+Therefore, the consequence of missing a true Alzheimer's case is more significant than incorrectly flagging a healthy individual for further investigation.
+
+### 7.2 Comparison of Model Results
+Comparing the performance of both models, ResNet-18 outperformed ConvNeXt across all evaluated test metrics, achieving higher acurracy, F1-score, and ROC-AUC.
+
+![Model ROC Curves](images/roc_curves.png)
+
+The ROC curves display that both models can strongly discriminate between classes with ResNet-18 generally achieving higher sensitivity at low false positive rates, making it more effective at identifying Alzheimer's disease cases while limiting incorrect classifications of normal cognitive images.
+
+Importantly, ResNet-18 achieved a higher sensitivity, resulting in only `90` false negatives compared to ConvNeXt's `111`. This means ResNet-18 missed `21` fewer AD images, while also producing `71` fewer false positives.
+
+### 7.3 Comparison of Model Computational Efficiency
+To measure the difference in inference time and GPU VRAM usage, both models ran inference on the same image from the test set, and only started measuring after the dataset loading and preprocessing was complete.
+
+
+| Model     | Inference Time | Peak VRAM Usage |
+| --------- | -------------- | --------------- |
+| ResNet-18 | 0.1521s        | 74.86 MB        |
+| ConvNeXt  | 0.2999s        | 154.38 MB       |
+
+From the table it can be seen that both models ran inference on the same test image in less than half a second. ConvNeXt used over twice the amount of VRAM compared to ResNet-18, however this is still easily within the available VRAM of most modern devices. 
+
+This shows that both models can be used in a clinical setting on a modern device, and recieve results quickly. ResNet-18 however, is able to run inference faster and with less VRAM.
+
+### 7.4 Final Result
+
+Due to ResNet-18 performing better on the hold out test set, and requiring less computational resources, **ResNet-18 is clearly the better performing model for this task**.
+
+## 8. Usage Instructions
+### 8.1 Environment Setup
+First clone repository and install dependencies:
+```bash
+git clone https://github.com/marchchris/PatternAnalysis-2026.git
+cd PatternAnalysis-2026/recognition/ConvNeXt_48900353
+pip install -r requirements.txt
+```
+
+### 8.2 Training
+Run training with the default configuration using:
+
+```bash
+python train.py
+```
+
+The training configuration can be changed with optional command-line arguments:
+
+```bash
+python train.py --model-name resnet18 --seed [SEED] --epochs [EPOCHS] --batch-size [BATCH SIZE] --learning-rate [LEARNING RATE] --weight-decay [WEIGHT DECAY] --warmup-epochs [NUM WARMUP EPOCHS] --num-workers [NUMB LOADER WORKERS]
+```
+
+| Optional argument | Description | Default |
+| --- | --- | --- |
+| `--model-name` | Model architecture to train | `resnet18` or `convnext` |
+| `--seed` | Random seed | `42` |
+| `--epochs` | Number of training epochs | `200` |
+| `--batch-size` | Number of images per batch | `64` |
+| `--learning-rate` | Initial learning rate | `0.001` |
+| `--weight-decay` | AdamW weight decay | `0.0001` |
+| `--warmup-epochs` | Number of linear warmup epochs | `5` |
+| `--num-workers` | Number of DataLoader worker processes | `4` |
+
+Each run creates its own `Models/<model-name>/<model-name>_<timestamp>/` directory and stores `<model-name>.pth`, `training_history.png`, `confusion_matrix.png`, and `test_report.txt.` The saved weights correspond to the highest validation accuracy, which may occur before epoch 200.
+
+An example of `test_report.txt` is:
+```
+Model Training Report:
+Training time: 135m 22s
+Average time per epoch: 39.78s
+
+Test Set Evaluation Report:
+Test loss: 0.3994
+Accuracy: 0.8784
+Precision (AD positive): 0.8399
+Recall (AD positive): 0.9250
+F1 Score (AD positive): 0.8804
+ROC AUC: 0.9445
+Support: 3060
+Negative support: 1580
+Positive support: 1480
+```
+
+### 8.3 Running Predictions
+
+Run predictions using a saved model checkpoint with:
+
+```bash
+python predict.py --model convnext --weights Models/convnext/convnext_[TIMESTAMP]/convnext.pth
+```
+
+By default, the script selects `9` images from the test split, prints the
+prediction details for each image, and saves a prediction visualisation to
+`Inferences/predictions_[TIMESTAMP].png`. A different number of test images can
+be selected with:
+
+```bash
+python predict.py --model resnet18 --weights Models/resnet18/resnet18_[TIMESTAMP]/resnet18.pth --num-images 12
+```
+
+An individual image can be supplied instead of sampling from the test split:
+
+```bash
+python predict.py --model convnext --weights Models/convnext/convnext_[TIMESTAMP]/convnext.pth --image path/to/image.jpeg
+```
+
+| Optional argument | Description | Default |
+| --- | --- | --- |
+| `--image` | Path to one image to predict instead of sampling test images | Test split |
+| `--num-images` | Number of test images to sample when `--image` is not supplied | `9` |
+| `--dataset-root` | Path to the ADNI dataset root | `~/Documents/Datasets/ADNI/AD_NC` |
+| `--output` | Output path for the prediction visualisation | `Inferences/predictions.png` |
+
+The required arguments are:
+
+| Required argument | Description |
+| --- | --- |
+| `--model` | Model architecture used by the checkpoint: `resnet18` or `convnext` |
+| `--weights` | Path to the saved `.pth` model checkpoint |
+
+For every prediction, the script prints the predicted class, confidence,
+class probabilities, prediction time, and peak VRAM usage. Prediction timing
+and VRAM usage are measured during model evaluation after the image has been
+loaded and preprocessed.
+
+An example of the prediction visualisation saved from the trained ConvNeXt model:
+
+![ConvNeXt Predictions](images/convnext_predictions.png)
+
+## 9. Project Structure
+```
+PatternAnalysis-2026/recognition/
+└── ConvNeXt_48900353/
+    ├── dataset.py
+    ├── modules.py
+    ├── train.py
+    ├── predict.py
+    ├── requirements.txt
+    ├── images/
+    │   ├── 
+    │   └── 
+    └── README.md
+```
 
 ## References
 - 1. Liu, Z., Mao, H., Wu, C.-Y., Feichtenhofer, C., Darrell, T., Xie, S., Facebook, A., & Research. (2022). A ConvNet for the 2020s. https://arxiv.org/pdf/2201.03545
 - 2. He, K., Zhang, X., Ren, S., & Sun, J. (2015, December 10). Deep residual learning for image recognition. arXiv. arXiv.Org. https://arxiv.org/abs/1512.03385
-- 3. COMP3710 Teaching Team. (2026, August 26). Lab Demonstration 2 Pattern Recognition [PDF]. https://learn.uq.edu.au/ultra/courses/_206498_1/document/_14338370_1?view=content&state=view
+
 
 ## AI Usage Statement
 - Chat GPT 6 was used for assisting with markdown syntax, table creation, and refinement of wording in the README, all actual content and information was written by myself.

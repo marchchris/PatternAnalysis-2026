@@ -11,6 +11,7 @@ subject remain in only one split.
 
 from pathlib import Path
 from collections import Counter
+from random import Random
 
 import torch
 from PIL import Image
@@ -204,73 +205,3 @@ def create_dataloaders(
         ))
     return tuple(loaders)
 
-def show_augmentation_comparison(dataset, count=6):
-    """Display the same samples before and after training augmentation."""
-
-    import matplotlib.pyplot as plt
-
-    count = min(count, len(dataset.samples))
-    original_images = []
-    augmented_images = []
-
-    for image_path, _ in dataset.samples[:count]:
-        with Image.open(image_path) as image:
-            original_images.append(preprocess_image(image, augment=False))
-            augmented_images.append(preprocess_image(image, augment=True))
-
-    original_images = torch.stack(original_images)
-    augmented_images = torch.stack(augmented_images)
-
-    columns = count
-    figure, axes = plt.subplots(
-        2, columns, figsize=(4 * columns, 8), squeeze=False
-    )
-
-    mean = torch.tensor([0.1160]).view(1, 1, 1)
-    std = torch.tensor([0.2230]).view(1, 1, 1)
-    for index in range(count):
-        original = (original_images[index] * std + mean).clamp(0, 1)
-        augmented = (augmented_images[index] * std + mean).clamp(0, 1)
-
-        axes[0, index].imshow(
-            original[0].numpy(), cmap="gray", vmin=0, vmax=1
-        )
-        axes[1, index].imshow(
-            augmented[0].numpy(), cmap="gray", vmin=0, vmax=1
-        )
-
-    for axis in axes.ravel():
-        axis.axis("off")
-    figure.text(
-        0.01, 0.75, "Before\naugmentation",
-        ha="left", va="center",
-    )
-    figure.text(
-        0.01, 0.25, "After\naugmentation",
-        ha="left", va="center",
-    )
-    figure.subplots_adjust(left=0.08, wspace=0.05, hspace=0.05)
-    plt.show()
-
-
-if __name__ == "__main__":
-    from train import (
-        CLASS_NAMES,
-        DATASET_ROOT,
-        DATASET_SPLIT_NAMES,
-        LABEL_MAP,
-        SEED,
-    )
-
-    train_loader, val_loader, test_loader = create_dataloaders(
-        DATASET_ROOT,
-        CLASS_NAMES,
-        DATASET_SPLIT_NAMES,
-        LABEL_MAP,
-        seed=SEED,
-    )
-    images, labels = next(iter(train_loader))
-    print(f"\nImage batch shape: {images.shape}")
-    print(f"Label batch shape: {labels.shape}")
-    print(f"Pixel range: {images.min().item():.3f} to {images.max().item():.3f}")
-    show_augmentation_comparison(train_loader.dataset)
