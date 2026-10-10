@@ -246,7 +246,7 @@ def build_model(
     model_name, num_classes=2, *, drop_path_rate=0.1, dropout_rate=0.3,
 ):
     """Build a randomly initialized ResNet or ConvNeXt model"""
-
+    
     if model_name == "resnet18":
         return ResNet18(num_classes=num_classes)
 
@@ -258,3 +258,11 @@ def build_model(
         )
 
     raise ValueError("model_name must be 'resnet18' or'convnext'.")
+
+
+if __name__ == "__main__":
+    for model_name in ("resnet18", "convnext"):
+        model = build_model(model_name)
+        parameter_count = sum(parameter.numel() for parameter in model.parameters())
+        print(f"{model_name}: {parameter_count} parameters")
+

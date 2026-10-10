@@ -16,7 +16,6 @@ import torch
 from PIL import Image
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
-from torchvision.transforms import functional as TF
 from torchvision.transforms import v2
 
 IMAGE_SIZE = (224, 224)
@@ -233,6 +232,55 @@ def show_examples(images, labels, class_names, count=6):
     plt.show()
 
 
+def show_augmentation_comparison(dataset, class_names, count=6):
+    """Display the same samples before and after training augmentation."""
+
+    import matplotlib.pyplot as plt
+
+    count = min(count, len(dataset.samples))
+    original_images = []
+    augmented_images = []
+    labels = []
+
+    for image_path, class_name in dataset.samples[:count]:
+        with Image.open(image_path) as image:
+            original_images.append(preprocess_image(image, augment=False))
+            augmented_images.append(preprocess_image(image, augment=True))
+        labels.append(dataset.label_map[class_name])
+
+    original_images = torch.stack(original_images)
+    augmented_images = torch.stack(augmented_images)
+    labels = torch.tensor(labels)
+
+    columns = min(count, 3)
+    figure, axes = plt.subplots(
+        2, columns, figsize=(4 * columns, 8), squeeze=False
+    )
+    axes = axes.ravel()
+
+    mean = torch.tensor([0.1160]).view(1, 1, 1)
+    std = torch.tensor([0.2230]).view(1, 1, 1)
+    for index in range(count):
+        original = (original_images[index] * std + mean).clamp(0, 1)
+        augmented = (augmented_images[index] * std + mean).clamp(0, 1)
+
+        axes[index].imshow(original[0].numpy(), cmap="gray", vmin=0, vmax=1)
+        axes[index].set_title(
+            f"Before augmentation\n{class_names[labels[index].item()]}"
+        )
+        axes[columns + index].imshow(
+            augmented[0].numpy(), cmap="gray", vmin=0, vmax=1
+        )
+        axes[columns + index].set_title(
+            f"After augmentation\n{class_names[labels[index].item()]}"
+        )
+
+    for axis in axes:
+        axis.axis("off")
+    figure.tight_layout()
+    plt.show()
+
+
 if __name__ == "__main__":
     from train import (
         CLASS_NAMES,
@@ -253,4 +301,4 @@ if __name__ == "__main__":
     print(f"\nImage batch shape: {images.shape}")
     print(f"Label batch shape: {labels.shape}")
     print(f"Pixel range: {images.min().item():.3f} to {images.max().item():.3f}")
-    show_examples(images, labels, CLASS_NAMES)
+    show_augmentation_comparison(train_loader.dataset, CLASS_NAMES)
