@@ -152,7 +152,7 @@ The model saved was from epoch `172` which achieved the highest validation accur
 ### 6.2 Test Results
 ![ConvNeXt Confusion Matrix](images/convnext_confusion_matrix.png)
 
-| Metric | ResNet-18 |
+| Metric | ConvNeXt |
 | --- | --- |
 | Accuracy | **87.84%** 
 | F1 | **88.04%** |
@@ -188,7 +188,7 @@ To measure the difference in inference time and GPU VRAM usage, both models ran 
 
 From the table it can be seen that both models ran inference on the same test image in less than half a second. ConvNeXt used over twice the amount of VRAM compared to ResNet-18, however this is still easily within the available VRAM of most modern devices. 
 
-This shows that both models can be used in a clinical setting on a modern device, and recieve results quickly. ResNet-18 however, is able to run inference faster and with less VRAM.
+This shows that both models can be used in a clinical setting on a modern device, to receive results quickly. ResNet-18 however, is able to run inference faster and with less VRAM.
 
 ### 7.4 Final Result
 
@@ -314,5 +314,5 @@ PatternAnalysis-2026/recognition/
 
 
 ## AI Usage Statement
-- Chat GPT 6 was used for assisting with markdown syntax, table creation, and refinement of wording in the README, all actual content and information was written by myself.
+- Chat GPT 6 was used for assisting with markdown syntax, table creation, spell check, and refinement of wording in the README, all actual content and information was written by myself.
 - Github Copilot (Chat GPT 5.6) was used to assist in writing code documentation and comments, and minor code refactoring. All data loading, preprocessing, training and analysis code was written by myself.

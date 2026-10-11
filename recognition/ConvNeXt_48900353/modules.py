@@ -180,9 +180,13 @@ class ConvNeXt(nn.Module):
     def __init__(self, num_classes=2, drop_path_rate=0.1, dropout_rate=0.2):
         super().__init__()
 
+        # tiny
         depths = (3, 3, 9, 3)
         widths = (96, 192, 384, 768)
-        # widths = (48, 96, 192, 384)
+
+        # pico
+        # depths = (2, 2, 6, 2)
+        # widths = (64, 128, 256, 512)
 
         # the stem reduces spatial size by four 224x224 -> 56x56.
         self.stem = nn.Sequential(
@@ -190,8 +194,6 @@ class ConvNeXt(nn.Module):
             LayerNorm2d(widths[0]),
         )
 
-        # stage output shapes (C, H, W) for 224x224 inputs:
-        # (96, 56, 56), (192, 28, 28), (384, 14, 14), (768, 7, 7)
         self.stages = nn.ModuleList()
         self.downsamples = nn.ModuleList()
         block_index = 0
@@ -243,7 +245,7 @@ class ConvNeXt(nn.Module):
         return self.head(x)
 
 def build_model(
-    model_name, num_classes=2, *, drop_path_rate=0.1, dropout_rate=0.3,
+    model_name, num_classes=2,
 ):
     """Build a randomly initialized ResNet or ConvNeXt model"""
     
@@ -253,8 +255,8 @@ def build_model(
     if model_name == "convnext":
         return ConvNeXt(
             num_classes=num_classes,
-            drop_path_rate=drop_path_rate,
-            dropout_rate=dropout_rate,
+            drop_path_rate=0.1,
+            dropout_rate=0.0,
         )
 
     raise ValueError("model_name must be 'resnet18' or'convnext'.")

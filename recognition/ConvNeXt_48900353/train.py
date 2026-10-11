@@ -19,7 +19,7 @@ BATCH_SIZE = 64
 EPOCHS = 200
 EARLY_STOPPING_PATIENCE = 1000
 LEARNING_RATE = 1e-3
-WEIGHT_DECAY = 1e-4
+WEIGHT_DECAY = 0.05
 NUM_WORKERS = 4
 WARMUP_EPOCHS = 5
 
@@ -342,8 +342,9 @@ def main():
     )
 
     # warm up linearly, then decay with cosine annealing
-    warmup_steps = args.warmup_epochs * len(train_loader)
-    cosine_steps = (args.epochs - args.warmup_epochs) * len(train_loader)
+    # The scheduler is stepped once per epoch below, so these values are in epochs.
+    warmup_steps = args.warmup_epochs
+    cosine_steps = args.epochs - args.warmup_epochs
     cosine_scheduler = CosineAnnealingLR(
         optimizer,
         T_max=cosine_steps,
