@@ -177,7 +177,7 @@ class ConvNeXt(nn.Module):
     dropout_rate is applied to pooled features before the classification head.
     """
 
-    def __init__(self, num_classes=2, drop_path_rate=0.1, dropout_rate=0.2):
+    def __init__(self, num_classes=2, drop_path_rate=0.1):
         super().__init__()
 
         # tiny
@@ -221,7 +221,6 @@ class ConvNeXt(nn.Module):
                 ))
 
         self.norm = nn.LayerNorm(widths[-1], eps=1e-6)
-        self.dropout = nn.Dropout(p=dropout_rate)
         self.head = nn.Linear(widths[-1], num_classes)
         self.apply(self._init_weights)
 
@@ -241,7 +240,6 @@ class ConvNeXt(nn.Module):
 
         x = x.mean(dim=(2, 3))  # global average pooling: (N, C, H, W) -> (N, C)
         x = self.norm(x)
-        x = self.dropout(x)
         return self.head(x)
 
 def build_model(
@@ -256,7 +254,6 @@ def build_model(
         return ConvNeXt(
             num_classes=num_classes,
             drop_path_rate=0.1,
-            dropout_rate=0.0,
         )
 
     raise ValueError("model_name must be 'resnet18' or'convnext'.")

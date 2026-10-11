@@ -22,9 +22,9 @@ Each block uses a `7 x 7` convolution to detect pattern in each feature channel 
 | Stage 3 | 9 blocks | `384 × 14 × 14` |
 | Downsample 3 | `2 × 2` convolution = stride 2 | `768 × 7 × 7` |
 | Stage 4 | 3 blocks | `768 × 7 × 7` |
-| Pool and head | LayerNorm, dropout, linear `768 → 2` | 2 logits |
+| Pool and head | LayerNorm, linear `768 → 2` | 2 logits |
 
-This design follows (Liu et al., 2022) configuration of `(3, 3, 9, 3)` blocks with `(96, 192, 384, 768)` channel dimensions giving approximately `27.8` million parameters. This project however changes the original design by reducing the stem to 1 input channel, adding dropout before the classification layer, and reducing the classification layer down to 2 classes.
+This design follows (Liu et al., 2022) configuration of `(3, 3, 9, 3)` blocks with `(96, 192, 384, 768)` channel dimensions giving approximately `27.8` million parameters. This project however changes the original design by reducing the stem down to 1 input channel and reducing the classification layer to 2 classes.
 
 ### 2.2 ResNet-18 Implementation
 ResNet-18 will provide a suitable baseline comparison for the ConvNeXt network since it was the predecessor ConvNeXt was based off. Each `ResNetBlock` contains a `3 x 3` convolution, BatchNorm and ReLU followed by another `3 x 3` convolution and BatchNorm. The output is added to a skip connection and passed through ReLU. This allows the block to learn a residual corecction while preserving a direct path for information and gradients.
@@ -87,42 +87,44 @@ Augmentation expands the appearances observed during learning without adding mor
 
 ### 4.1 Configuration
 
-| Parameter | Value |
-| --- | --- |
-| Initialization | Random weights |
-| Epochs | 200 |
-| Batch size | 64 |
-| Optimizer | AdamW |
-| Initial learning rate | `1e-3` |
-| Weight decay | `1e-4` |
-| Loss | `CrossEntropyLoss(label_smoothing=0.05)` |
-| Learning rate schedule | 5 epoch linear warmup, then cosine decay toward `1e-6` |
-| Checkpoint selection | Highest validation accuracy |
-| Random seed | 42 |
-| DataLoader workers | 4 |
+| Parameter | ResNet-18 | ConvNeXt |
+| --- | --- | --- |
+| Initialization | Random weights | Random weights |
+| Epochs | `200` | `200` |
+| Batch size | `64` | `64` |
+| Optimizer | AdamW | AdamW |
+| Initial learning rate | `1e-3` | `1e-3` |
+| Weight decay | `1e-4` | `0.05` |
+| Drop Path | N/A | `0.1` |
+| Loss | `CrossEntropyLoss(label_smoothing=0.05)` | `CrossEntropyLoss(label_smoothing=0.05)` |
+| Learning rate schedule | `5` epoch linear warmup, then cosine decay toward `1e-6` | `5` epoch linear warmup, then cosine decay toward `1e-6` |
+| Checkpoint selection | Highest validation accuracy | Highest validation accuracy |
+| Random seed | `42` | `42` |
+| DataLoader workers | `4` | `4` |
 
-Validation is run at the end of every epoch where the highest validation accuracy is the model saved. This was to ensure the highest accuracy model was saved even if the models performancce degraded afterwards due to overfitting. `200` epochs were used to allow training time for the model to properly converge. A small batch size of `64` was chosen to lower memory usage and use the stochastic noise during gradient calculations to potentially help the model escape poor local minima.
+Validation is run at the end of every epoch where the highest validation accuracy is the model saved. This was to ensure the highest accuracy model was saved even if the models performancce degraded afterwards due to overfitting. `200` epochs were used to allow training time for the model to properly converge. A small batch size of `64` was chosen to lower memory usage and use stochastic noise during gradient calculations to potentially help the model escape poor local minima.
 
 ### 4.2 Regularisation
-- ConvNeXt uses `30%` dropout to prevent co-adaptation.
-- ConvNext uses `10%` drop path for stochastic depth regularisation.
+- ConvNext uses `0.1` drop path for stochastic depth regularisation.
+- AdamW weight decay shrinks both models weights towards zero.
 - Cross Entropy Loss Label smoothing to reduce over confidence.
+
 ### 4.3 Learning Rate Schedule
-A combination of a linear warmup and cosine annealing was used to change learning rate during training. For the first `5` epochs the learning rate linearly increases up to the inital learning rate of `1e-3`. Then over the next `195` epochs, cosine annealing is used to progressively reduce the learning rate to `1e-6`. This helps the model achieve smooth convergence in late epoch learning as the gradient steps will be smaller.
+A combination of a linear warmup and cosine annealing was used to change learning rate during training. For the first `5` epochs the learning rate linearly increases up to the inital learning rate of `1e-3`. Then over the next `195` epochs, cosine annealing is used to progressively reduce the learning rate to `1e-6`. This helps the model achieve smooth convergence in late epoch learning.
 
 
 ![Plot of Learning rate vs epoch](images/learningrateplot.png)
 
 ## 5. ResNet-18 Model Results
 
-For these results, both models were trained using a Nvidia A100 GPU. The test metrics were evaluated using the `10%` testing split.
+For these results, both models were trained using a Nvidia RTX 5070 Ti. The test metrics were evaluated using the `10%` testing split.
 
 ### 5.1 Training History
-The model was trained for `200` epochs which took approximately `132` minutes and `39.61` seconds per epoch. The training loss and accuracy history plots are shown below.
+The model was trained for `200` epochs which took approximately `37` minutes and `11.24` seconds per epoch. The training loss and accuracy history plots are shown below.
 
 ![ResNet-18 Training History](images/resnet_training_history.png)
 
-The model saved was from epoch `167` which achieved the highest validation accuracy of `91.51%` indiciating the model is capable of generalising to unseen data. As displayed in figure (), ResNet-18 demonstrated strong learning performance steadily increasing to `99.36%` training accuracy. However, validation accuracy plateus at approximately `89-90%` after 100 epochs. This widening gap between training and validation performance indicates overfitting.
+The model saved was from epoch `167` which achieved the highest validation accuracy of `91.51%` indiciating the model is capable of generalising to unseen data. ResNet-18 demonstrated strong early learning performance quickly increasing to over `90%` training accuracy in less than `25` epochs. training accuracy. Validation accuracy improves significantly, reaching approximately `92%` towards the end of training, indicating strong generalisation to unseen data. During the early epochs, validation accuracy displays considerable fluctuations, with validation loss occasionally exceeding `1.0`, before becoming more stable as training continues. Despite this, training accuracy continues to increase towards `100%`, indicating overfitting without achieving further improvements on the validation set.
 
 
 ### 5.2 Test Results
@@ -133,34 +135,36 @@ The final model was evaluated on the hold out test set. The confusion matrix and
 
 | Metric | ResNet-18 |
 | --- | --- |
-| Accuracy | **90.85%** 
-| F1 | **90.85%** |
-| ROC-AUC | **94.96%** |
+| Accuracy | **91.24%** 
+| ROC-AUC | **94.54** |
+| F1 | **91.25%** |
+| Precision (AD positive) | **88.26%** |
+| Recall (AD positive) | **94.46%** |
 
-The model achieved strong performance on the test set, with an accuracy of `90.85%`, F1-score of `90.85%` and ROC-AUC of `94.96%`. Importantly, the model achieved an AD recall (sensitivity) of `93.92%` indicating that it successfully identified the majority of Alzheimer's cases.
-
-The higher number of false positive to false negatives is prefereble in the context of Alzheimer's screening, where failing to identify a potential case may have more serious consequences than incorrectly flagging a healthy individual, who can undergo further diagnostic testing to correct the mistake.
+The model achieved strong performance on the test set, with an accuracy of `91.24%`, F1-score of `91.25%` and ROC-AUC of `94.54%`. Importantly, the model achieved an AD recall of `94.46%` indicating that it successfully identified the majority of Alzheimer's cases. The model also achieved an AD precision of `88.26%` meaning majority of images predicted as Alzheimer's were correctly classified.
 
 ## 6. ConvNeXt Model Results
 ### 6.1 Training History
-The model was trained for `200` epochs which took approximately `135` minutes and `39.78` seconds per epoch. The training loss and accuracy history plots are shown below.
+The model was trained for `200` epochs which took approximately `88` minutes and `26.46` seconds per epoch. The training loss and accuracy history plots are shown below.
 
 ![ConvNeXt Training History](images/convnext_training_history.png)
 
-The model saved was from epoch `172` which achieved the highest validation accuracy of `90.57%`. Compared to ResNet-18, ConvNeXt demonstrates smoother validation performance following closely to training accuracy during earlier epochs. However, validation accuracy begins to plateu around epoch `130` were it again begins to clearly show signs of overfitting.
+The model saved was from epoch `172` which achieved the highest validation accuracy of `92.16%`. Compared to ResNet-18, ConvNeXt demonstrates smoother validation performance following closely to training accuracy during earlier epochs. However, validation accuracy begins to plateu around epoch `120` where training loss continues to decrease and training accuracy approaches `100%`, creating a widening generalisation gap between training and validation performance. This again indicates the model overfitting later in training.
 
 ### 6.2 Test Results
 ![ConvNeXt Confusion Matrix](images/convnext_confusion_matrix.png)
 
 | Metric | ConvNeXt |
 | --- | --- |
-| Accuracy | **87.84%** 
-| F1 | **88.04%** |
-| ROC-AUC | **94.45%** |
+| Accuracy | **91.63%** 
+| F1-score | **91.61%** |
+| ROC-AUC | **95.96%** |
+| Precision (AD positive) | **88.93%** |
+| Recall (AD positive) | **94.46%** |
 
-ConvNeXt achieved strong performance on the test set, with an accuracy of `87.84%`, F1-score of `88.04%` and ROC-AUC of `94.45%`. The confusion matrix shows it correctly identified less NC and AD images compared to ResNet. The model achieved a lower AD recall (sensitivity) of `92.50%` meaning ConvNeXt missed more true postives compared to ResNet.
+ConvNeXt achieved stronger performance on the test set compared to ResNet-18, with an accuracy of `91.63%`, F1-score of `91.61%` and ROC-AUC of `95.96%`. The model achieved a higher AD precision of `88.93%` but had an equal AD recall of `94.46%` compared to ResNet-18.
 
-This sensitivity still shows the model is effective at identifying the majority of Alzheimer's cases but it misses an additional `21` AD images compared to ResNet. These false negatives may lead a potential early case of Alzheimer's to go un-noticed. 
+ConvNeXt produced `12` fewer false positives to ResNet-18, demonstrating slightly better specificity while maintaining the same sensitivity.
 
 ## 7. Analysis of Results
 ### 7.1 Why Sensitivity Matters
