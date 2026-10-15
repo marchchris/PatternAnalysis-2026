@@ -82,6 +82,8 @@ Both models suffered from overfitting to the training set quickly reaching `100%
 
 Augmentation expands the appearances observed during learning without adding more patients. This helped the model generalise improving validation accuracy.
 
+![Before and After of Training Images](images/augmentation.png)
+
 ## 4. Hyperparameters and Training Methodology
 
 
@@ -131,17 +133,16 @@ The model saved was from epoch `167` which achieved the highest validation accur
 The final model was evaluated on the hold out test set. The confusion matrix and test metrics below shows the model's performance on this unseen data.
 
 
-![alt text](images/resnet_confusion_matrix.png)
+![ResNet-18 Confusion Matrix](images/resnet_confusion_matrix.png)
 
 | Metric | ResNet-18 |
 | --- | --- |
 | Accuracy | **91.24%** 
-| ROC-AUC | **94.54** |
 | F1 | **91.25%** |
 | Precision (AD positive) | **88.26%** |
 | Recall (AD positive) | **94.46%** |
 
-The model achieved strong performance on the test set, with an accuracy of `91.24%`, F1-score of `91.25%` and ROC-AUC of `94.54%`. Importantly, the model achieved an AD recall of `94.46%` indicating that it successfully identified the majority of Alzheimer's cases. The model also achieved an AD precision of `88.26%` meaning majority of images predicted as Alzheimer's were correctly classified.
+The model achieved strong performance on the test set, with an accuracy of `91.24%`, and F1-score of `91.25%`. Importantly, the model achieved an AD recall of `94.46%` indicating that it successfully identified the majority of Alzheimer's cases. The model also achieved an AD precision of `88.26%` meaning majority of images predicted as Alzheimer's were correctly classified.
 
 ## 6. ConvNeXt Model Results
 ### 6.1 Training History
@@ -158,11 +159,10 @@ The model saved was from epoch `172` which achieved the highest validation accur
 | --- | --- |
 | Accuracy | **91.63%** 
 | F1-score | **91.61%** |
-| ROC-AUC | **95.96%** |
 | Precision (AD positive) | **88.93%** |
 | Recall (AD positive) | **94.46%** |
 
-ConvNeXt achieved stronger performance on the test set compared to ResNet-18, with an accuracy of `91.63%`, F1-score of `91.61%` and ROC-AUC of `95.96%`. The model achieved a higher AD precision of `88.93%` but had an equal AD recall of `94.46%` compared to ResNet-18.
+ConvNeXt achieved stronger performance on the test set compared to ResNet-18, with an accuracy of `91.63%` and F1-score of `91.61%`. The model achieved a higher AD precision of `88.93%` but had an equal AD recall of `94.46%` compared to ResNet-18.
 
 ConvNeXt produced `12` fewer false positives to ResNet-18, demonstrating slightly better specificity while maintaining the same sensitivity.
 
@@ -173,13 +173,11 @@ High sensitivity is particularly important for this Alzheimer's disease classifi
 Therefore, the consequence of missing a true Alzheimer's case is more significant than incorrectly flagging a healthy individual for further investigation.
 
 ### 7.2 Comparison of Model Results
-Comparing the performance of both models, ResNet-18 outperformed ConvNeXt across all evaluated test metrics, achieving higher acurracy, F1-score, and ROC-AUC.
+Comparing the performance of both models, ConvNeXt outperformed ResNet-18 across all evaluated test metrics, achieving higher acurracy, F1-score, precision and recall.
 
 ![Model ROC Curves](images/roc_curves.png)
 
-The ROC curves display that both models can strongly discriminate between classes with ResNet-18 generally achieving higher sensitivity at low false positive rates, making it more effective at identifying Alzheimer's disease cases while limiting incorrect classifications of normal cognitive images.
-
-Importantly, ResNet-18 achieved a higher sensitivity, resulting in only `90` false negatives compared to ConvNeXt's `111`. This means ResNet-18 missed `21` fewer AD images, while also producing `71` fewer false positives.
+The ROC curves demonstrate that both ResNet-18 and ConvNeXt achieve strong performance in distinguishing between Alzheimer's disease and normal brain images. However, ConvNeXt achieves a higher ROC-AUC of `96.05%` compared to ResNet-18's `94.53%`, indicating better overall performance across different classification thresholds. ConvNeXt generally achieves a higher sensitivity at lower false positive rates, suggesting that it is more effective at identifying Alzeheimer's cases while minimising the number of healthy individuals incorrectly classified as having the disease. This makes it a more promising model for preliminary Alzheimer's screening.
 
 ### 7.3 Comparison of Model Computational Efficiency
 To measure the difference in inference time and GPU VRAM usage, both models ran inference on the same image from the test set, and only started measuring after the dataset loading and preprocessing was complete.
@@ -187,8 +185,8 @@ To measure the difference in inference time and GPU VRAM usage, both models ran 
 
 | Model     | Inference Time | Peak VRAM Usage |
 | --------- | -------------- | --------------- |
-| ResNet-18 | 0.1521s        | 74.86 MB        |
-| ConvNeXt  | 0.2999s        | 154.38 MB       |
+| ResNet-18 | 0.1659s        | 74.86 MB        |
+| ConvNeXt  | 0.2891s        | 154.38 MB       |
 
 From the table it can be seen that both models ran inference on the same test image in less than half a second. ConvNeXt used over twice the amount of VRAM compared to ResNet-18, however this is still easily within the available VRAM of most modern devices. 
 
@@ -196,7 +194,7 @@ This shows that both models can be used in a clinical setting on a modern device
 
 ### 7.4 Final Result
 
-Due to ResNet-18 performing better on the hold out test set, and requiring less computational resources, **ResNet-18 is clearly the better performing model for this task**.
+Due to ConvNext performing better on the hold out test set, **ConvNeXt is the better performing model for this task**.
 
 ## 8. Usage Instructions
 ### 8.1 Environment Setup
@@ -208,20 +206,15 @@ pip install -r requirements.txt
 ```
 
 ### 8.2 Training
-Run training with the default configuration using:
+Run training using with:
 
 ```bash
-python train.py
-```
-
-The training configuration can be changed with optional command-line arguments:
-
-```bash
-python train.py --model-name resnet18 --seed [SEED] --epochs [EPOCHS] --batch-size [BATCH SIZE] --learning-rate [LEARNING RATE] --weight-decay [WEIGHT DECAY] --warmup-epochs [NUM WARMUP EPOCHS] --num-workers [NUMB LOADER WORKERS]
+python train.py --dataset-root [DATASET ROOT] --model-name resnet18 --seed [SEED] --epochs [EPOCHS] --batch-size [BATCH SIZE] --learning-rate [LEARNING RATE] --weight-decay [WEIGHT DECAY] --warmup-epochs [NUM WARMUP EPOCHS] --num-workers [NUMB LOADER WORKERS]
 ```
 
 | Optional argument | Description | Default |
 | --- | --- | --- |
+| `--dataset-root` | Path to the ADNI dataset root containing `train/` and `test/` | `~/Documents/Datasets/ADNI/AD_NC` |
 | `--model-name` | Model architecture to train | `resnet18` or `convnext` |
 | `--seed` | Random seed | `42` |
 | `--epochs` | Number of training epochs | `200` |
@@ -236,16 +229,17 @@ Each run creates its own `Models/<model-name>/<model-name>_<timestamp>/` directo
 An example of `test_report.txt` is:
 ```
 Model Training Report:
-Training time: 135m 22s
-Average time per epoch: 39.78s
+Training time: 88m 12s
+
+Average time per epoch: 26.46s
 
 Test Set Evaluation Report:
-Test loss: 0.3994
-Accuracy: 0.8784
-Precision (AD positive): 0.8399
-Recall (AD positive): 0.9250
-F1 Score (AD positive): 0.8804
-ROC AUC: 0.9445
+Test loss: 0.3601
+Accuracy: 0.9163
+Precision (AD positive): 0.8893
+Recall (AD positive): 0.9446
+F1 Score (AD positive): 0.9161
+ROC AUC: 0.9596
 Support: 3060
 Negative support: 1580
 Positive support: 1480

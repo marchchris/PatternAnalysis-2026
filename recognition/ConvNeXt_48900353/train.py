@@ -266,6 +266,7 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Train an ADNI image classification model."
     )
+    parser.add_argument("--dataset-root", default=DATASET_ROOT)
     parser.add_argument("--seed", type=int, default=SEED)
     parser.add_argument(
         "--model-name",
@@ -319,7 +320,7 @@ def main():
 
     # get train, validation, and test data loaders
     train_loader, val_loader, test_loader = create_dataloaders(
-        dataset_root=DATASET_ROOT,
+        dataset_root=args.dataset_root,
         class_names=CLASS_NAMES,
         dataset_split_names=DATASET_SPLIT_NAMES,
         label_map=LABEL_MAP,
