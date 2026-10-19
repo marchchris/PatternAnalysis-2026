@@ -14,8 +14,8 @@ from modules import build_model
 
 DATASET_ROOT = "~/Documents/Datasets/ADNI/AD_NC"
 SEED = 42
-MODEL_NAME = "resnet18"
-BATCH_SIZE = 64
+MODEL_NAME = "convnext"
+BATCH_SIZE = 128
 EPOCHS = 200
 EARLY_STOPPING_PATIENCE = 1000
 LEARNING_RATE = 1e-3
