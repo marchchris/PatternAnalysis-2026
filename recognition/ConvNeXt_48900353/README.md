@@ -184,6 +184,7 @@ The final model was evaluated on the hold out test set. The confusion matrix and
 | AD Recall | **94.46%** |
 | NC Precision | **94.44%** |
 | NC Recall | **88.23%** |
+
 *Test evaluation results for ResNet-18 model.*
 
 The model achieved strong performance on the test set, with an accuracy of `91.24%`, and Macro F1-score of `91.24%`. Importantly, the model achieved an AD recall of `94.46%` indicating that it successfully identified the majority of Alzheimer's cases. The model also achieved an AD precision of `88.26%` meaning majority of images predicted as Alzheimer's were correctly classified.
@@ -209,6 +210,7 @@ The model saved was from epoch `172` which achieved the highest validation accur
 | AD Recall | **94.46%** |
 | NC Precision | **94.49%** |
 | NC Recall | **88.99%** |
+
 *Test evaluation results for ConvNeXt model.*
 
 ConvNeXt achieved stronger performance on the test set compared to ResNet-18, with an accuracy of `91.63%` and macro F1-score of `91.63%`. The model achieved a higher AD precision of `88.93%` but had an equal AD recall of `94.46%` compared to ResNet-18.
@@ -237,6 +239,7 @@ To measure the difference in inference time and GPU VRAM usage, both models ran 
 | --------- | -------------- | --------------- |
 | ResNet-18 | 0.1659s        | 74.86 MB        |
 | ConvNeXt  | 0.2891s        | 154.38 MB       |
+
 *Time for inference and Peak VRAM usage for ResNet-18 and ConvNeXt models.*
 
 From the table it can be seen that both models ran inference on the same test image in less than half a second. ConvNeXt used over twice the amount of VRAM compared to ResNet-18, however this is still easily within the available VRAM of most modern devices. 
@@ -268,6 +271,7 @@ The key question is whether ConvNeXt offers more reliable confidence on ambiguou
 | **Accuracy of accepted predictions** | **92.94%** | **93.21%** |
 | Error rate among accepted predictions | 7.06% | 6.79% |
 | Meets at least 80% coverage | **Yes** | **Yes** |
+
 *Coverage results for ResNet-18 and ConvNeXt models with 90% confidence threshold.*
 
 At a 90% confidence threshold, most images can be automatically classified under the proposed rule. ResNet-18 accepts `94.90%` of test images, leaving `5.10%` for human review, while ConvNeXt accepts `95.29%`, leaving `4.71%` for review. Both therefore exceed the acceptance criteria of automatically classifying at least `80%` of images.

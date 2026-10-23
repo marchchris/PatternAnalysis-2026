@@ -17,6 +17,13 @@ class ResNetBlock(nn.Module):
     """Two 3x3 convolutions with a skip connection"""
 
     def __init__(self, in_channels, out_channels, stride=1):
+        """Construct a two-convolution residual block with an optional projected shortcut.
+
+        Args:
+            in_channels: number of input feature channels
+            out_channels: number of output feature channels
+            stride: spatial stride of the first convolution and projected shortcut
+        """
         super().__init__()
 
         # first convolution
@@ -47,6 +54,14 @@ class ResNetBlock(nn.Module):
             )
 
     def forward(self, x):
+        """Apply the residual branch, add the shortcut, and activate the result.
+
+        Args:
+            x: input features of shape (N, in_channels, H, W)
+
+        Returns:
+            torch.Tensor: output of forward pass
+        """
         # save the residual path before applying the main convolutions
         shortcut = self.downsample(x)
         x = self.relu(self.bn1(self.conv1(x)))
@@ -59,9 +74,14 @@ class ResNet18(nn.Module):
     """ResNet-18 implementation of four stages with [2, 2, 2, 2] residual blocks"""
 
     def __init__(self, num_classes=2):
+        """Construct a randomly initialized ResNet-18 for single-channel images.
+
+        Args:
+            num_classes: Number of output classes
+        """
         super().__init__()
 
-        # The stem extracts low-level features and reduces 224x224 inputs to 56x56.
+        # the stem extracts low-level features and reduces 224x224 inputs to 56x56
         self.conv1 = nn.Conv2d(
             1, 64, kernel_size=7,
             stride=2, padding=3, bias=False,
@@ -70,10 +90,10 @@ class ResNet18(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
-        self.layer1 = self._make_stage(64, 64, stride=1)    # (64, 64, 64)
-        self.layer2 = self._make_stage(64, 128, stride=2)   # (128, 32, 32)
-        self.layer3 = self._make_stage(128, 256, stride=2)  # (256, 16, 16)
-        self.layer4 = self._make_stage(256, 512, stride=2)  # (512, 8, 8)
+        self.layer1 = self._make_stage(64, 64, stride=1)    # (C, H, W) = (64, 56, 56) for 224x224 input
+        self.layer2 = self._make_stage(64, 128, stride=2)   # (128, 28, 28)
+        self.layer3 = self._make_stage(128, 256, stride=2)  # (256, 14, 14)
+        self.layer4 = self._make_stage(256, 512, stride=2)  # (512, 7, 7)
 
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         self.fc = nn.Linear(512, num_classes)
@@ -81,6 +101,16 @@ class ResNet18(nn.Module):
 
     @staticmethod
     def _make_stage(in_channels, out_channels, stride):
+        """Build a stage of two residual blocks with downsampling in the first block.
+
+        Args:
+            in_channels: number of channels entering the stage
+            out_channels: number of channels produced by both blocks
+            stride: spatial stride applied by the first block
+
+        Returns:
+            nn.Sequential: two ResNetBlock modules forming one residual stage
+        """
         # only the first block changes the spatial size or channel count
         return nn.Sequential(
             ResNetBlock(in_channels, out_channels, stride=stride),
@@ -89,6 +119,11 @@ class ResNet18(nn.Module):
 
     @staticmethod
     def _init_weights(layer):
+        """Initialize convolution and batch-normalization parameters in place.
+
+        Args:
+            layer: layer to be initalised
+        """
         if isinstance(layer, nn.Conv2d):
             nn.init.kaiming_normal_(
                 layer.weight, mode="fan_out", nonlinearity="relu",
@@ -98,13 +133,21 @@ class ResNet18(nn.Module):
             nn.init.zeros_(layer.bias)
 
     def forward(self, x):
-        # The first stage keeps the resolution; later stages downsample it.
+        """Extract residual features and classify their spatial averages.
+
+        Args:
+            x: single-channel image batch, typically (N, 1, 224, 224)
+
+        Returns:
+            torch.Tensor: output of forward pass
+        """
+        # the first stage keeps the resolution, later stages downsample it
         x = self.maxpool(self.relu(self.bn1(self.conv1(x))))
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
         x = self.layer4(x)
-        x = self.avgpool(x).flatten(1)
+        x = self.avgpool(x).flatten(1)  # pool H/W, retaining batch and channel axes
         return self.fc(x)
 
 
@@ -112,10 +155,23 @@ class LayerNorm2d(nn.Module):
     """Normalize channels at each spatial position of a tensor"""
 
     def __init__(self, channels):
+        """Create layer normalization over the channel dimension of image features.
+
+        Args:
+            channels: number of channels in each input feature map
+        """
         super().__init__()
         self.norm = nn.LayerNorm(channels, eps=1e-6)
 
     def forward(self, x):
+        """Normalize channels independently at each spatial position.
+
+        Args:
+            x: features in (N, C, H, W) order, with C equal to channels
+
+        Returns:
+            torch.Tensor: mormalized features with the same shape and dimension order
+        """
         # layerNorm operates on the last dimension, so temporarily move C last
         x = x.permute(0, 2, 3, 1)  # NCHW -> NHWC
         x = self.norm(x)
@@ -125,12 +181,28 @@ class DropPath(nn.Module):
     """Randomly drop a samples residual branch during training"""
 
     def __init__(self, probability=0.0):
+        """Configure per-sample stochastic depth for a residual branch.
+
+        Args:
+            probability: Probability of dropping a branch
+
+        Raises:
+            ValueError: If probability is outside [0, 1).
+        """
         super().__init__()
         if not 0.0 <= probability < 1.0:
             raise ValueError("Drop-path probability must be in [0, 1).")
         self.probability = probability
 
     def forward(self, x):
+        """Randomly zero whole sample branches during training and rescale survivors.
+
+        Args:
+            x: residual features with the batch dimension first
+
+        Returns:
+            torch.Tensor: output of forward pass
+        """
         if not self.training or self.probability == 0.0:
             return x
 
@@ -138,12 +210,19 @@ class DropPath(nn.Module):
         # one random decision per image
         mask_shape = (x.shape[0],) + (1,) * (x.ndim - 1)
         mask = x.new_empty(mask_shape).bernoulli_(keep_probability)
+        # Rescale surviving branches to preserve their expected contribution.
         return x * mask / keep_probability
 
 class ConvNeXtBlock(nn.Module):
     """Depthwise convolution, channel expansion, and a residual connection"""
 
     def __init__(self, channels, drop_path=0.0):
+        """Construct a ConvNeXt residual block with layer scaling and stochastic depth.
+
+        Args:
+            channel: number of input and output feature channels
+            drop_path: per-sample residual drop probability in [0, 1)
+        """
         super().__init__()
 
         # groups=channels applies a separate spatial filter to each channel
@@ -162,6 +241,14 @@ class ConvNeXtBlock(nn.Module):
         self.drop_path = DropPath(drop_path)
 
     def forward(self, x):
+        """Filter spatial features, mix channels, and add the scaled residual branch.
+
+        Args:
+            x: features of shape (N, channels, H, W)
+
+        Returns:
+            torch.Tensor: updated features of the same shape as x
+        """
         shortcut = x
         x = self.depthwise(x)
         x = x.permute(0, 2, 3, 1)  # NCHW -> NHWC
@@ -174,10 +261,15 @@ class ConvNeXtBlock(nn.Module):
 class ConvNeXt(nn.Module):
     """ConvNeXt with depths [3, 3, 9, 3] and widths [96, 192, 384, 768].
     drop_path_rate is the maximum stochastic-depth probability, it increases linearly across the 18 blocks.
-    dropout_rate is applied to pooled features before the classification head.
     """
 
     def __init__(self, num_classes=2, drop_path_rate=0.1):
+        """Construct a randomly initialized ConvNeXt-Tiny for single-channel images.
+
+        Args:
+            num_classes: number of output class logits
+            drop_path_rate: maximum residual drop probability in [0, 1), increasing linearly from zero across the 18 blocks
+        """
         super().__init__()
 
         # tiny
@@ -204,6 +296,7 @@ class ConvNeXt(nn.Module):
             blocks = []
 
             for _ in range(depths[stage_index]):
+                # Deeper blocks receive progressively stronger stochastic depth.
                 probability = drop_path_rate * block_index / (total_blocks - 1)
                 blocks.append(ConvNeXtBlock(channels, drop_path=probability))
                 block_index += 1
@@ -211,7 +304,7 @@ class ConvNeXt(nn.Module):
             self.stages.append(nn.Sequential(*blocks))
 
             if stage_index < 3:
-                # Normalize, halve H/W, and double the channel count.
+                # normalize, halve H/W, and double the channel count
                 self.downsamples.append(nn.Sequential(
                     LayerNorm2d(channels),
                     nn.Conv2d(
@@ -226,12 +319,25 @@ class ConvNeXt(nn.Module):
 
     @staticmethod
     def _init_weights(layer):
+        """Initialize convolution and linear parameters in place.
+
+        Args:
+            layer: layer to be initalised
+        """
         if isinstance(layer, (nn.Conv2d, nn.Linear)):
             nn.init.trunc_normal_(layer.weight, std=0.02)
             if layer.bias is not None:
                 nn.init.zeros_(layer.bias)
 
     def forward(self, x):
+        """Extract hierarchical features and classify their normalized spatial averages.
+
+        Args:
+            x: single-channel image batch, typically (N, 1, 224, 224)
+
+        Returns:
+            torch.Tensor: raw class logits of shape (N, num_classes), before softmax
+        """
         x = self.stem(x)
         for stage_index in range(4):
             x = self.stages[stage_index](x)
@@ -245,7 +351,18 @@ class ConvNeXt(nn.Module):
 def build_model(
     model_name, num_classes=2,
 ):
-    """Build a randomly initialized ResNet or ConvNeXt model"""
+    """Build a supported model with randomly initialized weights.
+
+    Args:
+        model_name: architecture name, either "resnet18" or "convnext"
+        num_classes: number of output class logits
+
+    Returns:
+        nn.Module: a ResNet18 or ConvNeXt model
+
+    Raises:
+        ValueError: If model_name is not a supported architecture.
+    """
     
     if model_name == "resnet18":
         return ResNet18(num_classes=num_classes)

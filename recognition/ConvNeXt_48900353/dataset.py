@@ -11,7 +11,6 @@ subject remain in only one split.
 
 from pathlib import Path
 from collections import Counter
-from random import Random
 
 import torch
 from PIL import Image
@@ -21,6 +20,7 @@ from torchvision.transforms import v2
 
 IMAGE_SIZE = (224, 224)
 
+#random transforms vary training images before scaling and normalization
 TRAIN_TRANSFORM = v2.Compose([
     v2.Resize((256, 256)),
     v2.RandomResizedCrop(224, scale=(0.9, 1.0), ratio=(0.9, 1.1)),
@@ -38,6 +38,7 @@ TRAIN_TRANSFORM = v2.Compose([
 
 ])
 
+# evaluation uses fixed transforms so repeated predictions are comparable
 EVAL_TRANSFORM = v2.Compose([
     v2.Resize(IMAGE_SIZE),
     v2.ToImage(),
@@ -47,13 +48,29 @@ EVAL_TRANSFORM = v2.Compose([
 
 
 def subject_id_from_filename(path):
-    """Extract the subject ID from a filename containing a slice index."""
+    """Extract the subject identifier before the first underscore in a filename
+
+    Args:
+        path: Image path whose filename begins with a subject ID
+
+    Returns:
+        str: Subject ID extracted from file name
+    """
     parts = Path(path).stem.split("_")
     return parts[0]
 
 
 def build_image_table(dataset_root, class_names, dataset_split_names):
-    """Build image records containing paths, classes, and subject IDs."""
+    """Collect JPEG image paths, class names, and subject IDs from dataset folders
+
+    Args:
+        dataset_root: root containing the original split folders
+        class_names: class subfolders to scan within each split
+        dataset_split_names: original split folders to scan
+
+    Returns:
+        list[dict]: one record per .jpeg file with image_path, class_name and subject_id keys
+    """
     dataset_root = Path(dataset_root).expanduser().resolve()
     rows = []
 
@@ -62,7 +79,7 @@ def build_image_table(dataset_root, class_names, dataset_split_names):
         for class_name in class_names:
             folder = dataset_root / split / class_name
 
-             # get paths to all images in folder
+            # sort JPEG paths
             paths = sorted(
                 path for path in folder.rglob("*")
                 if path.suffix.lower() == ".jpeg" and path.is_file()
@@ -80,7 +97,17 @@ def build_image_table(dataset_root, class_names, dataset_split_names):
 
 
 def create_splits(dataset_root, class_names, dataset_split_names, seed):
-    """Create subject splits and print dataset summaries."""
+    """Create stratified subject splits and print image and class counts
+
+    Args:
+        dataset_root: root containing split and class subfolders
+        class_names: class folders to include
+        dataset_split_names: original split folders to pool together
+        seed: random state used for both subject-level splits
+
+    Returns:
+        tuple: Training, validation, and test image splits
+    """
     # create table where each row is exactly one image with its subject ID
     image_records = build_image_table(
         dataset_root,
@@ -140,7 +167,15 @@ def create_splits(dataset_root, class_names, dataset_split_names, seed):
 
 
 def preprocess_image(image, augment=False):
-    """Returns an optionally augmented float32 tensor with shape (1, 224, 224)."""
+    """Resize, augment, and normalize an image for model input.
+
+    Args:
+        image: input image, expected to be single-channel grayscale
+        augment: apply random training transforms when True, otherwise use evaluation transforms
+
+    Returns:
+        Tensor: Normalized float32 image of shape (1, 224, 224)
+    """
     transform = TRAIN_TRANSFORM if augment else EVAL_TRANSFORM
     return transform(image)
 
@@ -149,6 +184,13 @@ class ADNIDataset(Dataset):
     """Dataset for loading and preprocessing a split of ADNI images"""
 
     def __init__(self, records, label_map, augment=False):
+        """Store image records, label indices, and the selected preprocessing transform.
+
+        Args:
+            records: records with image_path and class_name keys.
+            label_map: mapping from each class name to its target index
+            augment: whether to use training-time image augmentation
+        """
         self.samples = [
             (record["image_path"], record["class_name"])
             for record in records
@@ -157,33 +199,47 @@ class ADNIDataset(Dataset):
         self.label_map = label_map
 
     def __len__(self):
+        """Count the image samples stored in this split.
+
+        Returns:
+            int: number of image records in the dataset
+        """
         return len(self.samples)
 
     def __getitem__(self, index):
+        """Load and preprocess one image and convert its class into a target tensor.
+
+        Args:
+            index: position of the sample in the stored image records
+
+        Returns:
+            tuple: Float32 image tensor of shape (1, 224, 224) for grayscale files
+        """
         image_path, class_name = self.samples[index]
         with Image.open(image_path) as image:
             image_tensor = self.transform(image)
+        # CrossEntropyLoss expects integer class indices stored as torch.long.
         label = torch.tensor(self.label_map[class_name], dtype=torch.long)
         return image_tensor, label
 
 
-def create_dataloaders(
-    dataset_root,
-    class_names,
-    dataset_split_names,
-    label_map,
-    seed,
-    batch_size=32,
-    num_workers=0,
-):
-    """Return train, validation, and test loaders"""
+def create_dataloaders(dataset_root, class_names, dataset_split_names, label_map, seed, batch_size=32, num_workers=0):
+    """Build subject-separated loaders with augmentation and shuffling for training.
 
-    splits = create_splits(
-        dataset_root,
-        class_names,
-        dataset_split_names,
-        seed,
-    )
+    Args:
+        dataset_root: root containing the original dataset splits
+        class_names: class subfolders to include
+        dataset_split_names: original split folders to pool together
+        label_ma: mapping from class names to integer targets
+        seed: seed for subject splitting and each loader generator
+        batch_size: maximum number of images in each batch
+        num_workers: number of loading processes; zero loads in the main process
+
+    Returns:
+        tuple: Training, validation, and test loaders
+    """
+
+    splits = create_splits(dataset_root,class_names,dataset_split_names, seed)
 
     datasets = []
     for split_index, frame in enumerate(splits):
@@ -199,9 +255,9 @@ def create_dataloaders(
             batch_size=batch_size,
             shuffle=split_index == 0, # only shuffle training set
             num_workers=num_workers,
-            generator=torch.Generator().manual_seed(seed),
-            pin_memory=torch.cuda.is_available(),
-            persistent_workers=num_workers > 0,
+            generator=torch.Generator().manual_seed(seed),  # seed sampling and worker RNGs
+            pin_memory=torch.cuda.is_available(),  # use pinned host memory for CUDA transfers
+            persistent_workers=num_workers > 0,  # reuse loading workers across epochs
         ))
     return tuple(loaders)
 

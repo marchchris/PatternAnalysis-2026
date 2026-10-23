@@ -27,17 +27,22 @@ CLASS_NAMES = ["NC", "AD"]
 LABEL_MAP = {"NC": 0, "AD": 1}
 DATASET_SPLIT_NAMES = ["train", "test"]
 
-def run_epoch(
-    model,
-    loader,
-    criterion,
-    device,
-    optimizer=None,
-    epoch=None,
-    total_epochs=EPOCHS,
-    scaler=None,
-):
-    """Train when an optimizer is provided, otherwise evaluate the model"""
+def run_epoch(model, loader, criterion, device, optimizer=None, epoch=None, total_epochs=EPOCHS, scaler=None):
+    """Run one training or evaluation pass and aggregate image-level metrics.
+
+    Args:
+        model: model to run training on
+        loader: loader containing batches
+        criterion: loss function
+        device: device for images, targets, and autocasting
+        optimizer: optimiser for weight updates
+        epoch: epoch number for progress output
+        total_epochs: total epoch count shown in progress output
+        scaler: an enabled scaler also enables float16 autocasting during training or evaluation.
+
+    Returns:
+        tuple: mean loss per image and accuracy, training updates model parameters
+    """
 
     training = optimizer is not None
     amp_enabled = scaler is not None and scaler.is_enabled()
@@ -51,7 +56,7 @@ def run_epoch(
     # validation and testing do not need gradient calculations
     with torch.set_grad_enabled(training):
         for step, (images, labels) in enumerate(loader, start=1):
-            # move images and labels to GPU
+            # Move both tensors to the selected CPU or CUDA device.
             images = images.to(device)
             labels = labels.to(device)
 
@@ -69,6 +74,7 @@ def run_epoch(
             # update weights if training model
             if training:
                 if scaler is not None:
+                    # Scale gradients to reduce float16 underflow before the optimizer step.
                     scaler.scale(loss).backward()
                     scaler.step(optimizer)
                     scaler.update()
@@ -95,7 +101,12 @@ def run_epoch(
     return total_loss / total_images, total_correct / total_images
 
 def save_training_plot(history, run_dir):
-    """Creates and saves loss and accuracy plots of model"""
+    """Save training and validation loss and accuracy curves.
+
+    Args:
+        history: epoch records containing epoch, train_loss, val_loss, train_accuracy, and val_accuracy
+        run_dir: existing directory for the output plot
+    """
     epochs = [entry["epoch"] for entry in history]
     train_losses = [entry["train_loss"] for entry in history]
     val_losses = [entry["val_loss"] for entry in history]
@@ -129,16 +140,18 @@ def save_training_plot(history, run_dir):
     plt.close(figure)
     print(f"Saved training plot to: {plot_path}")
 
-def save_test_report(
-    labels,
-    predictions,
-    ad_probabilities,
-    test_loss,
-    training_seconds,
-    average_epoch_seconds,
-    run_dir,
-):
-    """Calculate, save, and visualize test statistics with AD as the positive class."""
+def save_test_report(labels, predictions, ad_probabilities, test_loss, training_seconds, average_epoch_seconds, run_dir,):
+    """Calculate and save test metrics and a confusion matrix with AD positive.
+
+    Args:
+        labels: true class indices, including both NC and AD
+        predictions: predicted class indices aligned with labels
+        ad_probabilities: AD probabilities aligned with labels and used to calculate ROC AUC
+        test_loss: mean test loss per image
+        training_seconds: total training duration in seconds
+        average_epoch_seconds: mean duration of a completed epoch in seconds
+        run_dir: existing directory for the report and confusion matrix
+    """
     # convert the original class labels into binary labels: NC = 0 and AD = 1
     positive_labels = [1 if label == LABEL_MAP["AD"] else 0 for label in labels]
     positive_predictions = [1 if pred == LABEL_MAP["AD"] else 0 for pred in predictions]
@@ -210,17 +223,19 @@ def save_test_report(
     print(f"Saved confusion matrix image to: {confusion_plot_path}")
 
 @torch.inference_mode()
-def evaluate_test(
-    model,
-    test_loader,
-    criterion,
-    device,
-    training_seconds,
-    run_dir,
-    average_epoch_seconds,
-    scaler=None,
-):
-    """Evaluates the test set once after training without updating the model"""
+def evaluate_test(model, test_loader, criterion, device, training_seconds, run_dir, average_epoch_seconds, scaler=None,):
+    """Evaluate held-out images and save a report without updating model weights.
+
+    Args:
+        model: trained model
+        test_loader: loader containing test set batches
+        criterion: loss function returning a scalar batch-mean loss
+        device: device for images, targets, and autocasting
+        training_seconds: training duration in seconds for the report
+        run_dir: existing output directory for test results
+        average_epoch_seconds: average epoch duration in seconds
+        scaler: enables float16 autocasting if provided
+    """
     model.eval()
     total_loss = 0.0
     all_labels = []
@@ -238,7 +253,7 @@ def evaluate_test(
                 enabled=amp_enabled,
             ):
                 outputs = model(images) # forward pass
-                loss = criterion(outputs, labels) # calculatee loss
+                loss = criterion(outputs, labels) # calculate loss
 
             # softmax probabilities are used for AUC and confidence statistics
             probabilities = torch.softmax(outputs, dim=1)
@@ -262,7 +277,12 @@ def evaluate_test(
     )
 
 def parse_args():
-    """Parse command-line training configuration."""
+    """Parse and validate the command-line training configuration.
+
+    Returns:
+        argparse: Dataset path, seed, architecture, batch size, epoch counts, optimizer settings, worker count, and warmup configuration
+
+    """
     parser = argparse.ArgumentParser(
         description="Train an ADNI image classification model."
     )
@@ -286,6 +306,7 @@ def parse_args():
     parser.add_argument("--warmup-epochs", type=int, default=WARMUP_EPOCHS)
     args = parser.parse_args()
 
+    # Reject invalid training settings before loading data or creating a model.
     if args.batch_size < 1:
         parser.error("--batch-size must be at least 1")
     if args.epochs < 1:
@@ -305,6 +326,8 @@ def parse_args():
 
 
 def main():
+    """Train a classifier, restore its best validation checkpoint, and evaluate it.
+    """
     args = parse_args()
 
     # allow reproducibility
@@ -329,11 +352,12 @@ def main():
         seed=args.seed,
     )
 
-    # create model and move to GPU
+    # Create the model on the selected device; enable mixed precision only on CUDA.
     model = build_model(args.model_name, num_classes=len(LABEL_MAP)).to(device)
     use_amp = device.type == "cuda"
     scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
 
+    # Slightly soften target labels to discourage overconfident predictions.
     criterion = nn.CrossEntropyLoss(label_smoothing=0.05).to(device)
 
     optimizer = torch.optim.AdamW(
@@ -423,6 +447,7 @@ def main():
             best_val_accuracy = val_accuracy
             best_epoch = epoch
             epochs_without_improvement = 0
+            # Clone onto CPU so later optimizer updates cannot alter this checkpoint.
             best_model_state = {
                 key: value.detach().cpu().clone()
                 for key, value in model.state_dict().items()

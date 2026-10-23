@@ -18,9 +18,19 @@ from modules import build_model
 from train import DATASET_ROOT, LABEL_MAP, SEED, CLASS_NAMES, DATASET_SPLIT_NAMES
 
 def load_model(model_name, weights_path, device):
-    """Load the saved model"""
+    """Restore saved model weights and prepare the model for evaluation.
+
+    Args:
+        model_name: architecture name, either "resnet18" or "convnext"
+        weights_path: path to a saved model state dictionary (.pth)
+        device: device on which to place the restored model
+
+    Returns:
+        torch.nn.Module: model on device with loaded parameters
+    """
     model = build_model(model_name, num_classes=len(LABEL_MAP))
 
+    # restore on CPU first then transfer the fully loaded model to the target device
     state_dict = torch.load(
         Path(weights_path).expanduser(), map_location="cpu", weights_only=True
     )
@@ -32,22 +42,36 @@ def load_model(model_name, weights_path, device):
     return model
 
 def predict_image(model, image_path, device):
-    """Returns the original image, probabilities, inference time, and peak VRAM."""
+    """Predict class probabilities for one image and measure inference resources.
+
+    Args:
+        model: model to run inference on
+        image_path: image file to open and convert to grayscale
+        device: device used by the model and input tensor
+
+    Returns:
+        tuple: image, probability, inference time, and peak VRAM usage
+    """
     with Image.open(image_path) as image:
         original_image = image.convert("L").copy()
         image_tensor = preprocess_image(original_image)
 
-    # Exclude image loading and preprocessing so this measures model performance only.
     if device.type == "cuda":
         torch.cuda.reset_peak_memory_stats(device)
         torch.cuda.synchronize(device)
+
     start_time = perf_counter()
+
     with torch.inference_mode(): # disable gradient calculations
-        logits = model(image_tensor.unsqueeze(0).to(device))
+        logits = model(image_tensor.unsqueeze(0).to(device))  # add the batch dimension
         probabilities = torch.softmax(logits, dim=1)[0].cpu()
+
     if device.type == "cuda":
         torch.cuda.synchronize(device)
+
     inference_time = perf_counter() - start_time
+
+    # peak allocated CUDA memory includes model parameters already on the device
     peak_vram_bytes = (
         torch.cuda.max_memory_allocated(device) if device.type == "cuda" else None
     )
@@ -55,6 +79,9 @@ def predict_image(model, image_path, device):
     return original_image, probabilities, inference_time, peak_vram_bytes
 
 def main():
+    """Parse inference options, load weights, and plot sampled test predictions.
+    """
+
     # parse args from command line
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", choices=["resnet18", "convnext"], required=True)
@@ -79,8 +106,9 @@ def main():
     if args.image:
         # use provided images if paths are provided
         imgs = [{"image_path": str(Path(args.image).expanduser()), "class_name": None}]
+
     else:
-        # otherwise use images from test split
+        # Recreate the held-out split; it matches training when the seed and data match.
         _, _, test_frame = create_splits(
             Path(args.dataset_root).expanduser(),
             CLASS_NAMES,
@@ -167,9 +195,11 @@ def main():
         # save image to specified path with current date and time appended to end of image name
         output_path = Path(args.output).expanduser()
         timestamp = datetime.now().strftime("_%Y%m%d_%H%M%S")
+        
         output_path = output_path.with_name( # change image name to have date and time appended
             f"{output_path.stem}{timestamp}{output_path.suffix}"
         )
+
         output_path.parent.mkdir(parents=True, exist_ok=True)
         figure.savefig(output_path, dpi=150)
         plt.close(figure)
