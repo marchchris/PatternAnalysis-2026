@@ -23,7 +23,7 @@ There will be 2 main changes from the original architectures. Both model's input
 ### Preliminary Feasibility Evidence
 Preliminary data audits were conducted in Jupyter notebooks to assess the feasibility of preparing the ADNI dataset and running the proposed models on it. It was identified that the dataset contained `30520` grayscale JPEG images, all measuring `256 x 240` pixels, and these images were linked to `1526` scans from `680` unique patients. This consistent image format already provided an effective dataset prior to any preprocessing. However, the original training and test sets shared `216` patients across them, revealing there was patient leakage across the sets.
 
-To address this implementing stratified split by patient was investigated, assigning each patient to exactly one split. This resulted in `21140` training, `6420` validation, and `2960` test images, approximately matching the intended 70/20/10 proportions. The images were also broadly well balanced between classes, with `15660` NC images, and `14860` AD images.
+To address this implementing stratified split by patient was investigated, assigning each patient to exactly one split. This resulted in `21360` training, `6100` validation, and `3060` test images, approximately matching the intended 70/20/10 proportions. The images were also broadly well balanced between classes, with `15660` NC images, and `14860` AD images.
 
 Preliminary runs on an NVIDIA RTX 5070 Ti successfully began training ResNet-18 with a maximum tested batch size of `512` and ConvNeXt with a maximum tested batch size of `128`. Both configurations fit within the GPU's 16 GB of VRAM, indicating that they will fit within the larger VRAM capacity of the available NVIDIA A100 GPUs, especially given that smaller batch sizes will be used. These findings provide preliminary evidence that the proposed model configuration is computationally feasible on the available hardware.
 
@@ -179,12 +179,14 @@ The final model was evaluated on the hold out test set. The confusion matrix and
 | Metric | ResNet-18 |
 | --- | --- |
 | Accuracy | **91.24%** 
-| F1 | **91.25%** |
-| Precision (AD positive) | **88.26%** |
-| Recall (AD positive) | **94.46%** |
+| Macro F1 | **91.24%** |
+| AD Precision | **88.26%** |
+| AD Recall | **94.46%** |
+| NC Precision | **94.44%** |
+| NC Recall | **88.23%** |
 *Test evaluation results for ResNet-18 model.*
 
-The model achieved strong performance on the test set, with an accuracy of `91.24%`, and F1-score of `91.25%`. Importantly, the model achieved an AD recall of `94.46%` indicating that it successfully identified the majority of Alzheimer's cases. The model also achieved an AD precision of `88.26%` meaning majority of images predicted as Alzheimer's were correctly classified.
+The model achieved strong performance on the test set, with an accuracy of `91.24%`, and Macro F1-score of `91.24%`. Importantly, the model achieved an AD recall of `94.46%` indicating that it successfully identified the majority of Alzheimer's cases. The model also achieved an AD precision of `88.26%` meaning majority of images predicted as Alzheimer's were correctly classified.
 
 ## 6. ConvNeXt Model Results
 ### 6.1 Training History
@@ -202,12 +204,14 @@ The model saved was from epoch `172` which achieved the highest validation accur
 | Metric | ConvNeXt |
 | --- | --- |
 | Accuracy | **91.63%** 
-| F1-score | **91.61%** |
-| Precision (AD positive) | **88.93%** |
-| Recall (AD positive) | **94.46%** |
+| Macro F1-score | **91.63%** |
+| AD Precision | **88.93%** |
+| AD Recall | **94.46%** |
+| NC Precision | **94.49%** |
+| NC Recall | **88.99%** |
 *Test evaluation results for ConvNeXt model.*
 
-ConvNeXt achieved stronger performance on the test set compared to ResNet-18, with an accuracy of `91.63%` and F1-score of `91.61%`. The model achieved a higher AD precision of `88.93%` but had an equal AD recall of `94.46%` compared to ResNet-18.
+ConvNeXt achieved stronger performance on the test set compared to ResNet-18, with an accuracy of `91.63%` and macro F1-score of `91.63%`. The model achieved a higher AD precision of `88.93%` but had an equal AD recall of `94.46%` compared to ResNet-18.
 
 ConvNeXt produced `12` fewer false positives to ResNet-18, demonstrating slightly better specificity while maintaining the same sensitivity.
 
@@ -241,7 +245,7 @@ This shows that both models can be used in a clinical setting on a modern device
 
 ### 7.4 Justifying Architectural Complexity and Computational Complexity
 
-ConvNeXt only had a `0.39%` improvement in overall test accuracy compared to ResNet-18. This modest gain alone does not justify its added architectural complexity and computational cost. A convincing advantage would require ConvNeXt to accept more cases at the same error rate. The available evidence does not establish that ConvNeXt offers sufficient benefit over the baseline. ResNet-18 therefore remains a reasonable candidate for further evaluation.
+ConvNeXt only had a `0.39` percentage points improvement in overall test accuracy compared to ResNet-18. This modest gain alone does not justify its added architectural complexity and computational cost. A convincing advantage would require ConvNeXt to accept more cases at the same error rate. The available evidence does not establish that ConvNeXt offers sufficient benefit over the baseline. ResNet-18 therefore remains a reasonable candidate for further evaluation.
 
 ### 7.5 Final Result
 
@@ -271,7 +275,7 @@ At a 90% confidence threshold, most images can be automatically classified under
 ConvNeXt accepts `12` more images and has an accepted prediction accuracy of `93.21%` compared with `92.94%` for ResNet-18. This shows that ConvNeXt provides **slightly greater coverage and accepted accuracy at this confidence threshold**.
 
 ## 9. Failure Case Autopsy & Manager Recommendation
-To identify possible failure triggers for incorrect predictions, three high confidence incorrect predictions were sampled.
+To identify possible failure triggers for incorrect predictions, four misclassified predictions by the ConvNeXt model were selected.
 
 ### 9.1 Image `272543_84`: AD predicted as NC
 
@@ -287,12 +291,12 @@ This scan appears relatively clear and does not show obvious signs of degradatio
 ### 9.3 Image `1346089_90`: NC predicted as AD
 ![Brain scan 3](images/scan3.png)
 
-This slice shows a prominent dark internal space and strongly contrasted surrounding tissue. The model confidently predicted this NC scan as AD. This may indicate the model's overreliance on coarse structural patterns. The model may have learned to associate the apparent size of internal black spaces with AD.
+This slice shows a prominent dark internal space and strongly contrasted surrounding tissue. The model confidently predicted this NC scan as AD with `97.50%` confidence. This may indicate the model's overreliance on coarse structural patterns. The model may have learned to associate the apparent size of internal black spaces with AD.
 
 ### 9.4 Image `1415454_93.jpeg`: NC predicted as AD
 ![Brain scan 4](images/scan4.png)
 
-This slice appears relatively darker with less distinct tissue detail. This indicates that brightness or contrast is acting as an unintentional cue for the model to predict AD. Reduced visibility of fine structures may encourage reliance on global intensity and texture. This may be a result of the scan being an edge slice of the brain resulting in edge slices being confidently predicted as false positives.
+This slice appears relatively darker with less distinct tissue detail. This indicates that brightness or contrast is acting as an unintentional cue for the model to confidently predict NC as AD with `96.92%` confidence. Reduced visibility of fine structures may encourage reliance on global intensity and texture. This may be a result of the scan being an edge slice of the brain resulting in edge slices being confidently predicted as false positives.
 
 
 ### 9.5 Actionable Recommendation
@@ -330,6 +334,7 @@ First clone repository and install dependencies:
 ```bash
 git clone https://github.com/marchchris/PatternAnalysis-2026.git
 cd PatternAnalysis-2026/recognition/ConvNeXt_48900353
+git checkout topic-recognition
 pip install -r requirements.txt
 ```
 
@@ -427,6 +432,6 @@ An example of the prediction visualisation saved from the trained ConvNeXt model
 - 3. ADNI. (2024). Alzheimer’s disease neuroimaging initiative. ADNI. https://adni.loni.usc.edu/data-samples/adni-data/
 
 
-## AI Usage Statement
+## Artificial Intelligence Usage Disclosure
 - ChatGPT 6 was used for assisting with markdown syntax, table creation, spell check, and refinement of wording in the README, all actual content and information was written by myself.
 - GitHub Copilot (ChatGPT 5.6) was used to assist in writing code documentation and comments, and minor code refactoring. All data loading, preprocessing, training and analysis code was written by myself.
