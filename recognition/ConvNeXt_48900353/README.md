@@ -9,11 +9,14 @@
 The intended user this project is aimed towards is a researcher evaluating a machine learning model that could assist human reviewers in diagnosing Alzheimer's disease from MRI images. The project scope is limited to training and evaluating the models on the course-provided 2D ADNI MRI images, it will not aggregate multiple brain slices from the same patient to produce a prediction.
 
 ### Acceptance Criteria
-1. Every included ADNI image has a valid mapping to a patient, and the training, validation, and testing set has no patient leakage.
-2. ConvNeXt achieves a test accuracy of at least `80%`.
-3. The ConvNeXt model achieves a higher test accuracy than the baseline ResNet-18 model.
-4. Training fits within the provided NVIDIA A100 GPUs available VRAM.
-5. The model must automatically accept at least 80% of test images with a prediction confidence of 90% or higher, referring the remaining images for human review.
+
+| Acceptance Criteria | Outcome |
+| --- | --- |
+| Every included ADNI image has a valid mapping to a patient, and the training, validation, and testing set has no patient leakage. | **Reached.** All images were grouped by subject ID, and there was no patient leakage. |
+| ConvNeXt achieves a test accuracy of at least `80%`. | **Reached.** ConvNeXt achieved `91.63%` test accuracy, exceeding the target by `11.63` percentage points. |
+| The ConvNeXt model achieves a higher test accuracy than the baseline ResNet-18 model. | **Reached.** ConvNeXt achieved `91.63%` test accuracy compared with ResNet-18's `91.24%`, an improvement of `0.39` percentage points. |
+| Training fits within the provided NVIDIA A100 GPUs available VRAM. | **Reached.** Both models completed training on an NVIDIA RTX 5070 Ti with `16 GB` of VRAM, demonstrating that their training would both fit within the larger available NVIDIA A100 GPUs. |
+| The model must automatically accept at least 80% of test images with a prediction confidence of 90% or higher, referring the remaining images for human review. | **Reached.** At the `90%` confidence threshold, ConvNeXt accepted `2,916` of `3,060` test images (`95.29%`), exceeding the `80%` target and leaving `144` images (`4.71%`) for human review. |
 
 ### Model Choice and Course Concepts
 The selected models are ConvNeXt, which serves as the advanced model, and ResNet-18, which serves as the smaller baseline. Both models will be initialised with random weights and trained from scratch. The ConvNeXt design will closely follow the architecture presented in *A ConvNet for the 2020s (Liu et al., 2022) [1]*, using stage depths of `(3, 3, 9, 3)` and channel dimensions of `(96, 192, 384, 768)`. The ResNet-18 design will similarly follow the architecture described in *Deep Residual Learning for Image Recognition (He et al., 2015)*, using `(2, 2, 2, 2)` residual blocks and channel dimensions of `(64, 128, 256, 512)`. ResNet-18 was chosen as the baseline because ConvNeXt was developed by progressively modernising the ResNet architecture, making ResNet a suitable reference point for evaluating the benefits of ConvNeXt's design changes.
@@ -332,6 +335,17 @@ PatternAnalysis-2026/recognition/
 ### 10.3 Reproducibility
 The default seed is `42`. It is used by both stratified splits, PyTorch initialisation, CUDA seeding, and the DataLoader generators. Thus using the same ADNI dataset, should produce the exact same image splits and training results across different runs.
 
+### 10.4 Required Dependencies
+The main third-party dependencies imported by the project's Python files are listed below and in `requirements.txt`.
+
+| Dependency | Version |
+| --- | --- |
+| PyTorch | `2.14.1+cu132` |
+| Torchvision | `0.29.1+cu132` |
+| Pillow | `12.3.0` |
+| scikit-learn | `1.9.1` |
+| Matplotlib | `3.11.2` |
+
 ## 11. Usage Instructions
 ### 11.1 Environment Setup
 First clone repository and install dependencies:
@@ -429,6 +443,14 @@ An example of the prediction visualisation saved from the trained ConvNeXt model
 ![ConvNeXt Predictions](images/convnext_predictions.png)
 *Example of saved visualisation of predictions from `predict.py`.*
 
+
+## 12. Limitations and Possible Future Development
+
+1. **Individual slice predictions.** Currently, each slice is classified individually. Aggregating slices by patient and using majority voting for the final prediction, could improve accuracy by reducing the influence of individual errors on patient-level predictions.
+
+2. **Limited understanding of failure triggers.** In this project, incorrect predictions were analysed through visual inspection. Future experimentation could use Grad-CAM to visualise image regions influencing predictions and help investigate potential failure triggers.
+
+3. **Increase Dataset Size and Diversity.** Training used only the provided ADNI dataset. Expanding it to include the OASIS dataset could increase the number and diversity of scans, potentially improving generalisation.
 
 ## References
 - 1. Liu, Z., Mao, H., Wu, C.-Y., Feichtenhofer, C., Darrell, T., Xie, S., Facebook, A., & Research. (2022). A ConvNet for the 2020s. https://arxiv.org/pdf/2201.03545
